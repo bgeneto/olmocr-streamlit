@@ -1,6 +1,7 @@
 services:
   olmocr-worker:
     image: alleninstituteforai/olmocr:latest
+    container_name: olmocr-worker
     runtime: nvidia
     deploy:
       resources:
@@ -42,6 +43,7 @@ services:
     restart: unless-stopped
 
   olmocr-app:
+    container_name: olmocr-app
     build:
       context: .
       dockerfile: Dockerfile
