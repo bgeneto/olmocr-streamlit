@@ -17,8 +17,10 @@ services:
       - TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE}
       - DATA_PARALLEL_SIZE=${DATA_PARALLEL_SIZE}
       - PORT=${PORT}
+      - HF_HOME=/hf_cache
     volumes:
       - ${WORKSPACE_DIR}:/local_files
+      - ${WORKSPACE_DIR}/hf_cache:/hf_cache
     command: >
       sh -c "while true; do
         python -m olmocr.pipeline ${WORKSPACE_DIR}
