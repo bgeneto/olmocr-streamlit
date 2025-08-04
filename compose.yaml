@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${STREAMLIT_SERVER_PORT}:8501"
+      - "${STREAMLIT_PORT}:8501"
     volumes:
       - ${WORKSPACE_DIR}:/local_files
       - ./streamlit_app.py:/app/streamlit_app.py
@@ -58,5 +58,4 @@ services:
       - WORKSPACE_DIR=${WORKSPACE_DIR}
       - INPUT_PDF_DIR=${INPUT_PDF_DIR}
       - OUTPUT_MARKDOWN_DIR=${OUTPUT_MARKDOWN_DIR}
-      - STREAMLIT_SERVER_PORT=${STREAMLIT_SERVER_PORT}
     restart: unless-stopped
