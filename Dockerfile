@@ -3,7 +3,6 @@ FROM python:3.12-slim
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     poppler-utils \
-    ttf-mscorefonts-installer \
     fonts-crosextra-caladea \
     fonts-crosextra-carlito \
     gsfonts \
