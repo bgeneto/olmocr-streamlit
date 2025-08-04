@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   olmocr-worker:
     image: alleninstituteforai/olmocr:latest
@@ -9,10 +7,11 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: ${GPU_COUNT}
+              #count: ${GPU_COUNT}
+              device_ids: ["${GPU_DEVICE_ID}"]
               capabilities: [gpu]
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICE_ID}
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION}
       - MAX_MODEL_LEN=${MAX_MODEL_LEN}
       - TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE}
