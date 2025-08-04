@@ -36,5 +36,3 @@ Thumbs.db
 *.swp
 *.tmp
 
-# Ignore markdown output if desired
-# workspace/markdown/
