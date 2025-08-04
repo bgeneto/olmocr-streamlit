@@ -15,19 +15,12 @@ RUN pip install --no-cache-dir streamlit pandas numpy requests
 # Create app directory
 WORKDIR /app
 
-# Copy Streamlit app
+# Copy application files
 COPY streamlit_app.py /app/
+COPY entrypoint.sh /app/entrypoint.sh
 
-# Create entrypoint script
-RUN echo '#!/bin/sh\n\
- STREAMLIT_SERVER_PORT=${STREAMLIT_BROWSER_SERVER_PORT:-8501}\n\
- echo "Starting Streamlit on port $STREAMLIT_SERVER_PORT"\n\
- exec streamlit run /app/streamlit_app.py --browser.gatherUsageStats false --server.port $STREAMLIT_SERVER_PORT "$@"\n' > /app/entrypoint.sh && \
- chmod +x /app/entrypoint.sh
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
 
-# Streamlit configuration via config file instead of command line (source id="1")
-RUN mkdir -p /root/.streamlit && \
-    echo "[server]\nheadless = true\nenableCORS = false" > /root/.streamlit/config.toml
-
-# Use the entrypoint script
+# Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
