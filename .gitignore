@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+ENV/
+*.env
+
+# Streamlit
+.streamlit/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# Workspace and output
+workspace/
+workspace/*
+!workspace/input_pdfs/
+!workspace/markdown/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Others
+*.bak
+*.swp
+*.tmp
+
+# Ignore markdown output if desired
+# workspace/markdown/

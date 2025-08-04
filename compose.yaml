@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  olmocr-worker:
+    image: alleninstituteforai/olmocr:latest
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT}
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION}
+      - MAX_MODEL_LEN=${MAX_MODEL_LEN}
+      - TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE}
+      - DATA_PARALLEL_SIZE=${DATA_PARALLEL_SIZE}
+      - PORT=${PORT}
+    volumes:
+      - ${WORKSPACE_DIR}:${WORKSPACE_DIR}
+    command: >
+      sh -c "while true; do
+        python -m olmocr.pipeline ${WORKSPACE_DIR}
+          --markdown
+          --pdfs ${INPUT_PDF_DIR}/*.pdf
+          --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}
+          --max_model_len ${MAX_MODEL_LEN}
+          --tensor-parallel-size ${TENSOR_PARALLEL_SIZE}
+          --data-parallel-size ${DATA_PARALLEL_SIZE}
+          --port ${PORT}
+          --pages_per_group ${PAGES_PER_GROUP}
+          --max_page_retries ${MAX_PAGE_RETRIES}
+          --max_page_error_rate ${MAX_PAGE_ERROR_RATE}
+          --workers ${WORKERS}
+          --target_longest_image_dim ${TARGET_LONGEST_IMAGE_DIM}
+          --target_anchor_text_len ${TARGET_ANCHOR_TEXT_LEN};
+        sleep 10;
+      done"
+    restart: unless-stopped
+
+  streamlit-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "${STREAMLIT_SERVER_PORT}:${STREAMLIT_BROWSER_SERVER_PORT}"
+    volumes:
+      - ${WORKSPACE_DIR}:${WORKSPACE_DIR}
+      - ./streamlit_app.py:/app/streamlit_app.py
+    depends_on:
+      - olmocr-worker
+    environment:
+      - WORKSPACE_DIR=${WORKSPACE_DIR}
+      - INPUT_PDF_DIR=${INPUT_PDF_DIR}
+      - OUTPUT_MARKDOWN_DIR=${OUTPUT_MARKDOWN_DIR}
+    restart: unless-stopped
