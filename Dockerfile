@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     fonts-crosextra-carlito \
     gsfonts \
     wget \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -16,11 +17,13 @@ RUN pip install --no-cache-dir streamlit pandas numpy requests
 WORKDIR /app
 
 # Copy application files
-COPY streamlit_app.py /app/
-COPY entrypoint.sh /app/entrypoint.sh
+COPY ./streamlit_app.py /app/
+COPY ./entrypoint.sh /app/
 
-# Make entrypoint script executable
-RUN chmod +x /app/entrypoint.sh
+# Ensure proper permissions and line endings
+RUN chmod +x /app/entrypoint.sh && \
+    dos2unix /app/entrypoint.sh 2>/dev/null || echo "dos2unix not installed, but continuing..." && \
+    cat /app/entrypoint.sh
 
 # Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
