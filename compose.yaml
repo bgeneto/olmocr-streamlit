@@ -39,10 +39,10 @@ services:
       done"
     restart: unless-stopped
 
-  streamlit-app:
+  olmocr-app:
     build:
       context: .
-      dockerfile: Dockerfile.streamlit
+      dockerfile: Dockerfile
     ports:
       - "${STREAMLIT_SERVER_PORT}:${STREAMLIT_BROWSER_SERVER_PORT}"
     volumes:
