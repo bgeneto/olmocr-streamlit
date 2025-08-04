@@ -8,7 +8,8 @@ mkdir -p /root/.streamlit
 cat > /root/.streamlit/config.toml << EOF
 [server]
 headless = true
-enableCORS = false
+port = 8501
+enableCORS = true
 [browser]
 gatherUsageStats = false
 EOF
