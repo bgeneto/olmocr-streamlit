@@ -24,6 +24,7 @@ docker-compose.override.yml
 # Workspace and output
 workspace/
 workspace/*
+workspace/hf_cache/
 !workspace/input_pdfs/
 !workspace/markdown/
 
