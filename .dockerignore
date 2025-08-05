@@ -1,14 +1,62 @@
+# Git files
 .git
 .github
+.gitignore
+
+# Python cache and build artifacts
 .mypy_cache
 .pytest_cache
 .venv
 __pycache__
+*.pyc
+*.pyo
+*.pyd
 *.egg-info
+dist/
+build/
 
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
 
 # Let's not copy any bash scripts from the scripts folder over, otherwise trashing the docker image too much with recent changes
 scripts/*.sh
 
 # Ignore local bench files
 olmOCR-bench/
+
+# Docker files (when building)
+Dockerfile*
+docker-compose*.yml
+compose.yaml
+
+# Workspace directory (mounted as volume)
+workspace/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Jupyter notebooks
+*.ipynb
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+*.tmp
+
+# Local development files
+.env
+.env.local

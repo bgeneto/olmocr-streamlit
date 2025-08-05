@@ -49,15 +49,20 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 ENV PYTHONUNBUFFERED=1
 
 # keep the build context clean
-WORKDIR /build          
-COPY . /build
+WORKDIR /build
 
+# Copy only dependency files first for better caching
+COPY pyproject.toml setup.py README.md ./
 
+# Install dependencies first (this layer will be cached unless pyproject.toml changes)
 # Needed to resolve setuptools dependencies
 ENV UV_INDEX_STRATEGY="unsafe-best-match"
-RUN uv pip install --system --no-cache ".[gpu]" --extra-index-url https://download.pytorch.org/whl/cu128
+RUN uv pip install --system --no-cache ".[gpu]" --extra-index-url https://download.pytorch.org/whl/cu128 --no-build-isolation
 RUN uv pip install --system https://download.pytorch.org/whl/cu128/flashinfer/flashinfer_python-0.2.6.post1%2Bcu128torch2.7-cp39-abi3-linux_x86_64.whl
-RUN uv pip install --system --no-cache ".[bench]"
+RUN uv pip install --system --no-cache ".[bench]" --no-build-isolation
+
+# Copy application code AFTER installing dependencies
+COPY . /build
 
 RUN playwright install-deps
 RUN playwright install chromium

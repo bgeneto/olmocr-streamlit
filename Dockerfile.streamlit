@@ -10,18 +10,25 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Copy only dependency files first for better caching
 COPY pyproject.toml ./
 COPY README.md ./
+COPY setup.py ./
 
-# Copy application code
-COPY . .
+# Create a minimal olmocr package structure for dependency installation
+RUN mkdir -p olmocr && touch olmocr/__init__.py
 
-# Install olmOCR
+# Install dependencies first (this layer will be cached unless pyproject.toml changes)
 RUN pip install .
 
 # Install additional dependencies for Streamlit app
 RUN pip install streamlit requests
+
+# Copy application code AFTER installing dependencies
+COPY . .
+
+# Reinstall to pick up actual code (fast since deps are already cached)
+RUN pip install -e . --force-reinstall --no-deps
 
 # Create workspace directory
 RUN mkdir -p /workspace
