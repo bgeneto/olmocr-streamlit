@@ -122,27 +122,40 @@ async def build_page_query(local_pdf_path: str, page: int, target_longest_image_
     MAX_TOKENS = 4500
     assert image_rotation in [0, 90, 180, 270], "Invalid image rotation provided in build_page_query"
 
+    logger.debug(f"🖼️ Rendering PDF page: {local_pdf_path} page {page}, target_dim={target_longest_image_dim}, rotation={image_rotation}")
+
     # Allow the page rendering to process in the background while we get the anchor text (which blocks the main thread)
-    image_base64 = await asyncio.to_thread(render_pdf_to_base64png, local_pdf_path, page, target_longest_image_dim=target_longest_image_dim)
+    try:
+        image_base64 = await asyncio.to_thread(render_pdf_to_base64png, local_pdf_path, page, target_longest_image_dim=target_longest_image_dim)
+        logger.debug(f"✅ Successfully rendered page {page}, image size: {len(image_base64)} chars")
+    except Exception as e:
+        logger.error(f"💥 Failed to render PDF page {page}: {type(e).__name__}: {str(e)}")
+        raise
 
     if image_rotation != 0:
-        image_bytes = base64.b64decode(image_base64)
-        with Image.open(BytesIO(image_bytes)) as img:
-            if image_rotation == 90:
-                tranpose = Image.Transpose.ROTATE_90
-            elif image_rotation == 180:
-                tranpose = Image.Transpose.ROTATE_180
-            else:
-                tranpose = Image.Transpose.ROTATE_270
+        logger.debug(f"🔄 Applying {image_rotation}° rotation to image")
+        try:
+            image_bytes = base64.b64decode(image_base64)
+            with Image.open(BytesIO(image_bytes)) as img:
+                if image_rotation == 90:
+                    tranpose = Image.Transpose.ROTATE_90
+                elif image_rotation == 180:
+                    tranpose = Image.Transpose.ROTATE_180
+                else:
+                    tranpose = Image.Transpose.ROTATE_270
 
-            rotated_img = img.transpose(tranpose)
+                rotated_img = img.transpose(tranpose)
 
-            # Save the rotated image to a bytes buffer
-            buffered = BytesIO()
-            rotated_img.save(buffered, format="PNG")
+                # Save the rotated image to a bytes buffer
+                buffered = BytesIO()
+                rotated_img.save(buffered, format="PNG")
 
-        # Encode the rotated image back to base64
-        image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            # Encode the rotated image back to base64
+            image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            logger.debug(f"✅ Successfully rotated image, new size: {len(image_base64)} chars")
+        except Exception as e:
+            logger.error(f"💥 Failed to rotate image: {type(e).__name__}: {str(e)}")
+            raise
 
     return {
         "model": "olmocr",
@@ -239,6 +252,10 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
     exponential_backoffs = 0
     cumulative_rotation = 0  # Track cumulative rotation instead of local
     attempt = 0
+
+    logger.info(f"🚀 Starting page processing: worker={worker_id}, file={pdf_orig_path}, page={page_num}")
+    logger.debug(f"🔧 Configuration: target_dim={args.target_longest_image_dim}, guided_decoding={args.guided_decoding}, max_retries={MAX_RETRIES}")
+
     await tracker.track_work(worker_id, f"{pdf_orig_path}-{page_num}", "started")
 
     while attempt < MAX_RETRIES:
@@ -258,25 +275,41 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
                 r"---\nprimary_language: (?:[a-z]{2}|null)\nis_rotation_valid: (?:True|False|true|false)\nrotation_correction: (?:0|90|180|270)\nis_table: (?:True|False|true|false)\nis_diagram: (?:True|False|true|false)\n(?:---|---\n[\s\S]+)"
             )
 
-        logger.info(f"Built page query for {pdf_orig_path}-{page_num}")
+        logger.info(f"📤 Sending request to server: {COMPLETION_URL}")
+        logger.debug(f"📊 Query details: temperature={query['temperature']}, max_tokens={query['max_tokens']}")
 
         try:
             status_code, response_body = await apost(COMPLETION_URL, json_data=query)
 
+            logger.debug(f"📥 Server response: status_code={status_code}, response_length={len(response_body) if response_body else 0}")
+
             if status_code == 400:
+                logger.error(f"❌ BAD REQUEST (400): Server rejected our request for {pdf_orig_path}-{page_num}")
+                logger.error(f"🔍 Response body: {response_body}")
                 raise ValueError(f"Got BadRequestError from server: {response_body}, skipping this response")
             elif status_code == 500:
+                logger.error(f"❌ INTERNAL SERVER ERROR (500): Server error for {pdf_orig_path}-{page_num}")
+                logger.error(f"🔍 Response body: {response_body}")
                 raise ValueError(f"Got InternalServerError from server: {response_body}, skipping this response")
             elif status_code != 200:
+                logger.error(f"❌ HTTP ERROR ({status_code}): Unexpected status code for {pdf_orig_path}-{page_num}")
+                logger.error(f"🔍 Response body: {response_body}")
                 raise ValueError(f"Error http status {status_code}")
 
+            logger.debug(f"📝 Parsing JSON response for {pdf_orig_path}-{page_num}")
             base_response_data = json.loads(response_body)
 
             if base_response_data["usage"]["total_tokens"] > MODEL_MAX_CONTEXT:
+                logger.warning(f"⚠️ TOKEN LIMIT EXCEEDED: {base_response_data['usage']['total_tokens']} > {MODEL_MAX_CONTEXT} for {pdf_orig_path}-{page_num}")
                 raise ValueError(f"Response exceeded model_max_context of {MODEL_MAX_CONTEXT}, cannot use this response")
 
             if base_response_data["choices"][0]["finish_reason"] != "stop":
+                logger.warning(f"⚠️ INCOMPLETE RESPONSE: finish_reason='{base_response_data['choices'][0]['finish_reason']}' for {pdf_orig_path}-{page_num}")
                 raise ValueError("Response did not finish with reason code 'stop', cannot use this response")
+
+            logger.debug(
+                f"✅ Valid response received: input_tokens={base_response_data['usage'].get('prompt_tokens', 0)}, output_tokens={base_response_data['usage'].get('completion_tokens', 0)}"
+            )
 
             metrics.add_metrics(
                 server_input_tokens=base_response_data["usage"].get("prompt_tokens", 0),
@@ -285,19 +318,27 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
 
             model_response_markdown = base_response_data["choices"][0]["message"]["content"]
 
+            logger.debug(f"📋 Parsing front matter for {pdf_orig_path}-{page_num}")
+            logger.debug(f"🔍 Response preview: {model_response_markdown[:200]}...")
+
             parser = FrontMatterParser(front_matter_class=PageResponse)
             front_matter, text = parser._extract_front_matter_and_text(model_response_markdown)
             page_response = parser._parse_front_matter(front_matter, text)
 
+            logger.debug(
+                f"📊 Parsed response: rotation_valid={page_response.is_rotation_valid}, rotation_correction={page_response.rotation_correction}, is_table={page_response.is_table}, is_diagram={page_response.is_diagram}"
+            )
+
             if not page_response.is_rotation_valid and attempt < MAX_RETRIES - 1:
                 logger.info(
-                    f"Got invalid_page rotation for {pdf_orig_path}-{page_num} attempt {attempt}, retrying with {page_response.rotation_correction} rotation"
+                    f"🔄 ROTATION RETRY: Got invalid rotation for {pdf_orig_path}-{page_num} attempt {attempt}, retrying with {page_response.rotation_correction}° rotation"
                 )
                 # Add the rotation correction to the cumulative rotation
                 cumulative_rotation = (cumulative_rotation + page_response.rotation_correction) % 360
-                logger.info(f"Cumulative rotation is now {cumulative_rotation} degrees")
+                logger.info(f"🔄 Cumulative rotation is now {cumulative_rotation}°")
                 raise ValueError(f"invalid_page rotation for {pdf_orig_path}-{page_num}")
 
+            logger.info(f"✅ SUCCESS: Page {pdf_orig_path}-{page_num} processed successfully on attempt {attempt}")
             metrics.add_metrics(**{"completed_pages": 1, f"finished_on_attempt_{attempt}": 1})
             await tracker.track_work(worker_id, f"{pdf_orig_path}-{page_num}", "finished")
             return PageResult(
@@ -309,30 +350,65 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
                 is_fallback=False,
             )
         except (ConnectionError, OSError, asyncio.TimeoutError) as e:
-            logger.warning(f"Client error on attempt {attempt} for {pdf_orig_path}-{page_num}: {type(e)} {e}")
+            logger.error(f"🔌 CONNECTION ERROR on attempt {attempt} for {pdf_orig_path}-{page_num}")
+            logger.error(f"🔍 Error type: {type(e).__name__}")
+            logger.error(f"🔍 Error message: {str(e)}")
+            logger.error(f"🔍 Server URL: {COMPLETION_URL}")
+
+            if hasattr(e, "errno") and e.errno:
+                logger.error(f"🔍 Error code: {e.errno}")
 
             # Now we want to do exponential backoff, and not count this as an actual page retry
             # Page retrys are supposed to be for fixing bad results from the model, but actual requests to vllm
             # are supposed to work. Probably this means that the server is just restarting
             sleep_delay = 10 * (2**exponential_backoffs)
             exponential_backoffs += 1
-            logger.info(f"Sleeping for {sleep_delay} seconds on {pdf_orig_path}-{page_num} to allow server restart")
+            logger.warning(f"😴 Sleeping for {sleep_delay} seconds on {pdf_orig_path}-{page_num} to allow server restart (backoff #{exponential_backoffs})")
             await asyncio.sleep(sleep_delay)
         except asyncio.CancelledError:
-            logger.info(f"Process page {pdf_orig_path}-{page_num} cancelled")
+            logger.info(f"🚫 Process page {pdf_orig_path}-{page_num} cancelled")
             await tracker.track_work(worker_id, f"{pdf_orig_path}-{page_num}", "cancelled")
             raise
         except json.JSONDecodeError as e:
-            logger.warning(f"JSON decode error on attempt {attempt} for {pdf_orig_path}-{page_num}: {e}")
+            logger.error(f"📝 JSON DECODE ERROR on attempt {attempt} for {pdf_orig_path}-{page_num}")
+            logger.error(f"🔍 Error message: {str(e)}")
+            try:
+                if "response_body" in locals() and response_body:
+                    logger.error(f"🔍 Response body preview: {response_body[:500]}...")
+                else:
+                    logger.error(f"🔍 Response body: Not available")
+            except Exception:
+                logger.error(f"🔍 Response body: Could not access")
+            logger.error(f"🔍 Position: line {e.lineno}, column {e.colno}")
             attempt += 1
         except ValueError as e:
-            logger.warning(f"ValueError on attempt {attempt} for {pdf_orig_path}-{page_num}: {type(e)} - {e}")
+            logger.error(f"⚠️ VALUE ERROR on attempt {attempt} for {pdf_orig_path}-{page_num}")
+            logger.error(f"🔍 Error message: {str(e)}")
+
+            # Try to provide more context about what might have gone wrong
+            if "BadRequestError" in str(e):
+                logger.error("🔍 This suggests the request format is invalid or the model rejected it")
+            elif "InternalServerError" in str(e):
+                logger.error("🔍 This suggests a server-side error in the vLLM instance")
+            elif "rotation" in str(e):
+                logger.warning("🔍 This is a rotation retry - will try again with corrected rotation")
+            elif "model_max_context" in str(e):
+                logger.error("🔍 The response was too long for the model's context window")
+            elif "finish_reason" in str(e):
+                logger.error("🔍 The model didn't complete its response properly")
+
             attempt += 1
         except Exception as e:
-            logger.exception(f"Unexpected error on attempt {attempt} for {pdf_orig_path}-{page_num}: {type(e)} - {e}")
+            logger.error(f"💥 UNEXPECTED ERROR on attempt {attempt} for {pdf_orig_path}-{page_num}")
+            logger.error(f"🔍 Error type: {type(e).__name__}")
+            logger.error(f"🔍 Error message: {str(e)}")
+            logger.exception(f"🔍 Full traceback:")
             attempt += 1
 
-    logger.error(f"Failed to process {pdf_orig_path}-{page_num} after {MAX_RETRIES} attempts.")
+    logger.error(f"💀 FINAL FAILURE: Failed to process {pdf_orig_path}-{page_num} after {MAX_RETRIES} attempts.")
+    logger.error(f"🔍 Total connection errors: {exponential_backoffs}")
+    logger.error(f"🔍 Total retry attempts: {attempt}")
+    logger.error(f"🔍 Falling back to anchor text extraction")
     metrics.add_metrics(failed_pages=1)
     await tracker.track_work(worker_id, f"{pdf_orig_path}-{page_num}", "errored")
 
@@ -354,30 +430,46 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
 
 
 async def process_pdf(args, worker_id: int, pdf_orig_path: str):
+    logger.info(f"📄 Processing PDF: worker={worker_id}, file={pdf_orig_path}")
+
     with tempfile.NamedTemporaryFile("wb+", suffix=".pdf", delete=False) as tf:
         try:
+            logger.debug(f"⬇️ Downloading from S3: {pdf_orig_path}")
             data = await asyncio.to_thread(lambda: get_s3_bytes_with_backoff(pdf_s3, pdf_orig_path))
             tf.write(data)
             tf.flush()
+            logger.debug(f"✅ Downloaded {len(data)} bytes")
         except ClientError as ex:
             if ex.response["Error"]["Code"] == "NoSuchKey":
-                logger.info(f"S3 File Not found, skipping it completely {pdf_orig_path}")
+                logger.warning(f"📁 S3 File Not found, skipping: {pdf_orig_path}")
                 return None
             else:
+                logger.error(f"💥 S3 Error downloading {pdf_orig_path}: {ex.response['Error']['Code']} - {ex.response['Error']['Message']}")
                 raise
 
         if is_png(tf.name) or is_jpeg(tf.name):
-            logger.info(f"Converting {pdf_orig_path} from image to PDF format...")
-            tf.seek(0)
-            tf.write(convert_image_to_pdf_bytes(tf.name))
-            tf.flush()
+            logger.info(f"🖼️ Converting {pdf_orig_path} from image to PDF format...")
+            try:
+                tf.seek(0)
+                tf.write(convert_image_to_pdf_bytes(tf.name))
+                tf.flush()
+                logger.debug(f"✅ Successfully converted image to PDF")
+            except Exception as e:
+                logger.error(f"💥 Failed to convert image to PDF: {type(e).__name__}: {str(e)}")
+                raise
 
     try:
+        logger.debug(f"📖 Reading PDF structure")
         try:
             reader = PdfReader(tf.name)
             num_pages = reader.get_num_pages()
-        except:
-            logger.exception(f"Could not count number of pages for {pdf_orig_path}, aborting document")
+            logger.info(f"📊 PDF Analysis: {num_pages} pages found in {pdf_orig_path}")
+        except Exception as e:
+            logger.error(f"💥 PDF READ ERROR: Could not read PDF structure for {pdf_orig_path}")
+            logger.error(f"🔍 Error type: {type(e).__name__}")
+            logger.error(f"🔍 Error message: {str(e)}")
+            logger.error(f"🔍 File size: {os.path.getsize(tf.name)} bytes")
+            logger.exception(f"🔍 Full traceback:")
             return None
 
         logger.info(f"Got {num_pages} pages to do for {pdf_orig_path} in worker {worker_id}")
@@ -482,6 +574,8 @@ def build_dolma_document(pdf_orig_path, page_results):
 
 
 async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
+    logger.info(f"👷 Worker {worker_id} started and waiting for work")
+
     while True:
         # Wait until allowed to proceed
         await semaphore.acquire()
@@ -489,11 +583,11 @@ async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
         work_item = await work_queue.get_work()
 
         if work_item is None:
-            logger.info(f"Worker {worker_id} exiting due to empty queue")
+            logger.info(f"🏁 Worker {worker_id} exiting due to empty queue")
             semaphore.release()
             break
 
-        logger.info(f"Worker {worker_id} processing work item {work_item.hash}")
+        logger.info(f"🔧 Worker {worker_id} processing work item {work_item.hash} ({len(work_item.work_paths)} files)")
         await tracker.clear_work(worker_id)
 
         try:
@@ -592,7 +686,11 @@ async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
 
             await work_queue.mark_done(work_item)
         except Exception as e:
-            logger.exception(f"Exception occurred while processing work_hash {work_item.hash}: {e}")
+            logger.error(f"💥 WORKER ERROR: Exception in worker {worker_id} while processing {work_item.hash}")
+            logger.error(f"🔍 Error type: {type(e).__name__}")
+            logger.error(f"🔍 Error message: {str(e)}")
+            logger.error(f"🔍 Work item paths: {work_item.work_paths}")
+            logger.exception(f"🔍 Full traceback:")
         finally:
             semaphore.release()
 
@@ -736,25 +834,48 @@ async def vllm_server_ready():
     delay_sec = 1
     url = get_server_url("/v1/models")
 
+    logger.info(f"🔍 Testing server connection to: {url}")
+    if VLLM_API_KEY:
+        logger.debug("🔑 Using API key for authentication")
+    else:
+        logger.debug("🔓 No API key configured")
+
     for attempt in range(1, max_attempts + 1):
         try:
             headers = {}
             if VLLM_API_KEY:
                 headers["Authorization"] = f"Bearer {VLLM_API_KEY}"
 
-            async with httpx.AsyncClient() as session:
+            async with httpx.AsyncClient(timeout=10.0) as session:
+                logger.debug(f"🔗 Attempt {attempt}: Testing connection to {url}")
                 response = await session.get(url, headers=headers)
 
                 if response.status_code == 200:
-                    logger.info("vllm server is ready.")
+                    logger.info("✅ vLLM server is ready and responding!")
+                    try:
+                        models_data = response.json()
+                        if "data" in models_data and models_data["data"]:
+                            model_ids = [model.get("id", "unknown") for model in models_data["data"]]
+                            logger.info(f"📋 Available models: {', '.join(model_ids)}")
+                    except:
+                        logger.debug("📋 Could not parse models response")
                     return
                 else:
-                    logger.info(f"Attempt {attempt}: Unexpected status code {response.status_code}")
-        except Exception:
-            logger.warning(f"Attempt {attempt}: Please wait for vllm server to become ready...")
+                    logger.warning(f"❌ Attempt {attempt}: Unexpected status code {response.status_code}")
+                    logger.debug(f"🔍 Response body: {response.text[:500]}")
+        except httpx.ConnectError as e:
+            logger.warning(f"🔌 Attempt {attempt}: Connection failed - {str(e)}")
+        except httpx.TimeoutException as e:
+            logger.warning(f"⏰ Attempt {attempt}: Request timed out - {str(e)}")
+        except Exception as e:
+            logger.warning(f"💥 Attempt {attempt}: Unexpected error - {type(e).__name__}: {str(e)}")
 
+        if attempt <= 5 or attempt % 30 == 0:  # Log more frequently at start, then every 30 attempts
+            logger.info(f"😴 Waiting {delay_sec}s before retry {attempt + 1}/{max_attempts}...")
         await asyncio.sleep(delay_sec)
 
+    logger.error(f"💀 FATAL: vLLM server did not become ready after {max_attempts} attempts ({max_attempts * delay_sec}s)")
+    logger.error(f"🔍 Final URL tested: {url}")
     raise Exception("vllm server did not become ready after waiting.")
 
 

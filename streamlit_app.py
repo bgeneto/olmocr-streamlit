@@ -197,19 +197,50 @@ def main():
                     with st.expander("📋 Conversion Log", expanded=False):
                         log_container = st.empty()
 
+                        # Set up logging to capture detailed output
                         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
 
                         log_lines = []
+                        error_count = 0
+                        connection_errors = 0
+
                         while True:
                             output = process.stdout.readline()
                             if output == "" and process.poll() is not None:
                                 break
                             if output:
-                                log_lines.append(output.strip())
-                                # Show last 20 lines of log
-                                log_container.text("\n".join(log_lines[-20:]))
+                                line = output.strip()
+                                log_lines.append(line)
+
+                                # Count different types of errors for better user feedback
+                                if "ERROR" in line or "💥" in line or "❌" in line:
+                                    error_count += 1
+                                if "CONNECTION ERROR" in line or "🔌" in line:
+                                    connection_errors += 1
+
+                                # Show last 25 lines of log with some error highlighting
+                                recent_lines = log_lines[-25:]
+                                formatted_lines = []
+                                for log_line in recent_lines:
+                                    if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
+                                        formatted_lines.append(f"🔥 {log_line}")
+                                    elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
+                                        formatted_lines.append(f"⚠️ {log_line}")
+                                    elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
+                                        formatted_lines.append(f"✅ {log_line}")
+                                    else:
+                                        formatted_lines.append(log_line)
+
+                                log_container.text("\n".join(formatted_lines))
 
                         return_code = process.poll()
+
+                        # Show error summary if there were issues
+                        if error_count > 0:
+                            st.error(f"⚠️ Detected {error_count} errors during processing")
+                            if connection_errors > 0:
+                                st.error(f"🔌 {connection_errors} connection errors detected - check if vLLM server is running and accessible")
+                                st.info("💡 Try checking the server status in the sidebar or restart the vLLM server")
 
                     progress_bar.progress(80)
                     status_text.text("📝 Processing results...")
