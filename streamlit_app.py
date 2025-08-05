@@ -286,7 +286,7 @@ def main():
     target_dim = st.sidebar.slider(
         "Target Image Dimension",
         800,
-        2000,
+        2048,
         1288,
         help="Set the maximum dimension (in pixels) for images extracted from PDFs. Larger values may improve OCR accuracy but increase processing time and output size. See olmOCR docs for guidance.",
     )
