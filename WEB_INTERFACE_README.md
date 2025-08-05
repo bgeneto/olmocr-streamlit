@@ -78,8 +78,22 @@ The Streamlit app can be configured through environment variables:
 services:
   streamlit-app:
     environment:
-      - VLLM_DEFAULT_URL=http://vllm-server:8000
+      - VLLM_BASE_URL=http://vllm-server:8000
+      - VLLM_API_KEY=your_api_key_here  # Optional, only if server requires authentication
       - MAX_FILE_SIZE=100MB
+```
+
+### API Key Authentication
+
+If your vLLM server requires authentication, set the `VLLM_API_KEY` environment variable:
+
+```bash
+# For development
+export VLLM_API_KEY="your_api_key_here"
+
+# Or in docker-compose.yml
+environment:
+  - VLLM_API_KEY=your_api_key_here
 ```
 
 ## Advanced Usage
@@ -107,7 +121,8 @@ You can also use the command line with an external vLLM server:
 python -m olmocr.pipeline ./workspace \
   --markdown \
   --pdfs document.pdf \
-  --vllm_base_url http://localhost:30024
+  --vllm_base_url http://localhost:30024 \
+  --vllm_api_key your_api_key_here  # Optional, only if server requires authentication
 ```
 
 ### Development Mode

@@ -95,6 +95,9 @@ BASE_SERVER_PORT = 30024
 # Global variable to store the vLLM base URL
 VLLM_BASE_URL = None
 
+# Global variable to store the vLLM API key
+VLLM_API_KEY = None
+
 
 def get_server_url(endpoint=""):
     """Construct server URL based on configuration"""
@@ -172,14 +175,20 @@ async def apost(url, json_data):
         reader, writer = await asyncio.open_connection(host, port)
 
         json_payload = json.dumps(json_data)
-        request = (
-            f"POST {path} HTTP/1.1\r\n"
-            f"Host: {host}\r\n"
-            f"Content-Type: application/json\r\n"
-            f"Content-Length: {len(json_payload)}\r\n"
-            f"Connection: close\r\n\r\n"
-            f"{json_payload}"
-        )
+
+        # Build headers
+        headers = [
+            f"Host: {host}",
+            "Content-Type: application/json",
+            f"Content-Length: {len(json_payload)}",
+            "Connection: close",
+        ]
+
+        # Add authorization header if API key is set
+        if VLLM_API_KEY:
+            headers.append(f"Authorization: Bearer {VLLM_API_KEY}")
+
+        request = f"POST {path} HTTP/1.1\r\n" + "\r\n".join(headers) + "\r\n\r\n" + json_payload
         writer.write(request.encode())
         await writer.drain()
 
@@ -729,8 +738,12 @@ async def vllm_server_ready():
 
     for attempt in range(1, max_attempts + 1):
         try:
+            headers = {}
+            if VLLM_API_KEY:
+                headers["Authorization"] = f"Bearer {VLLM_API_KEY}"
+
             async with httpx.AsyncClient() as session:
-                response = await session.get(url)
+                response = await session.get(url, headers=headers)
 
                 if response.status_code == 200:
                     logger.info("vllm server is ready.")
@@ -1066,6 +1079,11 @@ async def main():
         help="Base URL for external vLLM server (e.g., http://localhost or http://vllm-server). If provided, no local vLLM server will be started.",
         default=None,
     )
+    vllm_group.add_argument(
+        "--vllm_api_key",
+        help="API key for vLLM server authentication. If not provided, will use VLLM_API_KEY environment variable.",
+        default=None,
+    )
 
     # Beaker/job running stuff
     beaker_group = parser.add_argument_group("beaker/cluster execution")
@@ -1087,9 +1105,10 @@ async def main():
 
     global workspace_s3, pdf_s3
     # set the global BASE_SERVER_PORT from args
-    global BASE_SERVER_PORT, VLLM_BASE_URL
+    global BASE_SERVER_PORT, VLLM_BASE_URL, VLLM_API_KEY
     BASE_SERVER_PORT = args.port
     VLLM_BASE_URL = args.vllm_base_url
+    VLLM_API_KEY = args.vllm_api_key or os.environ.get("VLLM_API_KEY")
 
     # setup the job to work in beaker environment, load secrets, adjust logging, etc.
     if "BEAKER_JOB_NAME" in os.environ:

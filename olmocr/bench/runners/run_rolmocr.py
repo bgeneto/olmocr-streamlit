@@ -1,4 +1,5 @@
 import httpx
+import os
 
 from olmocr.data.renderpdf import render_pdf_to_base64png
 
@@ -10,6 +11,7 @@ async def run_rolmocr(
     model: str = "reducto/RolmOCR",
     temperature: float = 0.2,
     target_longest_image_dim: int = 1024,
+    api_key: str | None = None,
 ) -> str:
     """
 
@@ -44,8 +46,15 @@ async def run_rolmocr(
     # Make request and get response using httpx
     url = f"http://{server}/v1/chat/completions"
 
+    # Set up headers with optional authorization
+    headers = {}
+    # Use provided API key or fall back to environment variable
+    vllm_api_key = api_key or os.environ.get("VLLM_API_KEY")
+    if vllm_api_key:
+        headers["Authorization"] = f"Bearer {vllm_api_key}"
+
     async with httpx.AsyncClient(timeout=300) as client:
-        response = await client.post(url, json=request)
+        response = await client.post(url, json=request, headers=headers)
 
         response.raise_for_status()
         data = response.json()

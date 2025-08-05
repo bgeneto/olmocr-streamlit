@@ -43,11 +43,11 @@ fi
 # Trap function to handle Ctrl+C (SIGINT)
 cleanup() {
     echo -e "\n[INFO] Received interrupt signal. Cleaning up..."
-    
+
     # Find and kill any Python processes started by this script
     echo "[INFO] Stopping any running Python processes"
     pkill -P $$ python || true
-    
+
     # Stop server if running
     if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
         echo "[INFO] Stopping server (PID: $SERVER_PID)"
@@ -56,7 +56,7 @@ cleanup() {
     fi
 
     pkill vllm
-    
+
     echo "[INFO] Cleanup complete. Exiting."
     exit 1
 }
@@ -68,7 +68,7 @@ trap cleanup SIGINT
 check_port() {
     port=30000
     echo "[INFO] Checking if port $port is available..."
-    
+
     if command -v lsof >/dev/null 2>&1; then
         # Linux/macOS
         if lsof -i :$port >/dev/null 2>&1; then
@@ -108,7 +108,7 @@ check_port() {
             return 0
         fi
     fi
-    
+
     echo "[INFO] Port $port is available."
     return 0
 }
@@ -117,7 +117,7 @@ check_port() {
 create_conda_env() {
     env_name=$1
     python_version=$2
-    
+
     # Check if environment exists
     if conda info --envs | grep -q "^$env_name "; then
         echo "Environment $env_name already exists, using it."
@@ -132,10 +132,10 @@ start_server() {
     server_type=$1
     model_name=$2
     shift 2  # Remove server type and model name from the argument list
-    
+
     echo "Starting $server_type server for model: $model_name"
     echo "Additional arguments: $@"
-    
+
     if [ "$server_type" = "sglang" ]; then
         python -m sglang.launch_server --port 30000 --model "$model_name" "$@" &
     elif [ "$server_type" = "vllm" ]; then
@@ -145,19 +145,26 @@ start_server() {
         exit 1
     fi
     SERVER_PID=$!
-    
+
     # Check if the server process is running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
         echo "Failed to start server process. Exiting."
         exit 1
     fi
-    
+
     # Wait for the server to be ready by checking the models endpoint
     echo "Waiting for server to be ready..."
     max_attempts=300
     attempt=0
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s "http://localhost:30000/v1/models" -o /dev/null -w "%{http_code}" | grep -q "200"; then
+        # Build curl command with optional authorization header
+        if [ -n "$VLLM_API_KEY" ]; then
+            curl_cmd="curl -s -H \"Authorization: Bearer $VLLM_API_KEY\" \"http://localhost:30000/v1/models\" -o /dev/null -w \"%{http_code}\""
+        else
+            curl_cmd="curl -s \"http://localhost:30000/v1/models\" -o /dev/null -w \"%{http_code}\""
+        fi
+
+        if eval "$curl_cmd" | grep -q "200"; then
             echo "Server is ready!"
             return 0
         fi
@@ -165,7 +172,7 @@ start_server() {
         echo "Waiting for server... attempt $attempt/$max_attempts"
         sleep 2
     done
-    
+
     echo "Server failed to become ready after multiple attempts. Exiting."
     kill $SERVER_PID
     SERVER_PID=""
@@ -216,7 +223,7 @@ python -m olmocr.bench.convert gemini:name=gemini_flash2:model=gemini-2.0-flash 
 
 echo "Running mistral..."
 pip install mistralai
-python -m olmocr.bench.convert --dir "$BENCH_DIR" --parallel 4 mistral 
+python -m olmocr.bench.convert --dir "$BENCH_DIR" --parallel 4 mistral
 
 # Run raw server benchmarks with generic server function
 # For each model, start server, run benchmark, then stop server
@@ -277,7 +284,7 @@ stop_server
 # echo "Installing magic-pdf and running mineru benchmarks..."
 # pip install -U "magic-pdf[full]==1.2.2" --extra-index-url https://wheels.myhloli.com
 # python -m pip install paddlepaddle==3.0.0rc1 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
-# pip install huggingface_hub Pillow paddleocr ultralytics doclayout-yolo pycocotools 
+# pip install huggingface_hub Pillow paddleocr ultralytics doclayout-yolo pycocotools
 # wget https://github.com/opendatalab/MinerU/raw/master/scripts/download_models_hf.py -O download_models_hf.py
 # python download_models_hf.py
 # python -m olmocr.bench.convert mineru
