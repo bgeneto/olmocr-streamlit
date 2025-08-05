@@ -208,6 +208,32 @@ def latex_replace(md):
     return md
 
 
+def process_markdown_files_inplace(markdown_files):
+    """Apply LaTeX replacements to markdown files in-place"""
+    processed_count = 0
+    for md_file in markdown_files:
+        try:
+            # Read the file
+            with open(md_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Apply LaTeX replacements
+            corrected_content = latex_replace(content)
+
+            # Only write back if content changed
+            if corrected_content != content:
+                with open(md_file, "w", encoding="utf-8") as f:
+                    f.write(corrected_content)
+                processed_count += 1
+        except Exception as e:
+            st.warning(f"⚠️ Could not process LaTeX in {os.path.basename(md_file)}: {e}")
+
+    if processed_count > 0:
+        st.info(f"🔧 Applied LaTeX corrections to {processed_count} markdown file(s)")
+
+    return processed_count
+
+
 def main():
     st.title("📄 PDF to Markdown Converter")
     st.markdown("Convert PDF documents to Markdown using visual language models.")
@@ -398,6 +424,10 @@ def main():
                                     markdown_files.append(os.path.join(root, file))
 
                         st.info(f"📄 Found {len(markdown_files)} markdown files in {markdown_dir}")
+
+                        # Apply LaTeX corrections to markdown files in-place
+                        process_markdown_files_inplace(markdown_files)
+
                         progress_bar.progress(100)
                         status_text.text("✅ Conversion completed successfully!")
 
@@ -412,8 +442,6 @@ def main():
                                 md_file = markdown_files[0]
                                 with open(md_file, "r", encoding="utf-8") as f:
                                     markdown_content = f.read()
-
-                                markdown_content = latex_replace(markdown_content)
 
                                 # Auto-download prompt with prominent download button
                                 st.info("📥 **Your file is ready!** Click the button below to download:")
@@ -539,7 +567,6 @@ def main():
                                         with open(md_file, "r", encoding="utf-8") as f:
                                             markdown_content = f.read()
 
-                                        markdown_content = latex_replace(markdown_content)
                                         preview_content = markdown_content[:preview_char_limit]
                                         with tabs[i]:
                                             st.markdown(f"**Preview limited to first {preview_char_limit} characters.**")
