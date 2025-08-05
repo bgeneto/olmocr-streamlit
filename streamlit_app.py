@@ -222,9 +222,23 @@ def main():
 
     # Advanced Settings
     st.sidebar.subheader("Advanced Settings")
-    target_dim = st.sidebar.slider("Target Image Dimension", 800, 2000, 1288)
-    apply_filter = st.sidebar.checkbox("Apply PDF Filter", value=True)
-    guided_decoding = st.sidebar.checkbox("Enable Guided Decoding", value=False)
+    target_dim = st.sidebar.slider(
+        "Target Image Dimension",
+        800,
+        2000,
+        1288,
+        help="Set the maximum dimension (in pixels) for images extracted from PDFs. Larger values may improve OCR accuracy but increase processing time and output size. See olmOCR docs for guidance.",
+    )
+    apply_filter = st.sidebar.checkbox(
+        "Apply PDF Filter",
+        value=True,
+        help="Apply advanced filtering to remove noisy or irrelevant PDF content before conversion. See olmOCR docs for details.",
+    )
+    guided_decoding = st.sidebar.checkbox(
+        "Enable Guided Decoding",
+        value=False,
+        help="Use guided decoding to improve Markdown output quality by leveraging document structure hints. See olmOCR docs for more info.",
+    )
     default_workers = int(os.environ.get("DEFAULT_WORKERS", 4))
     workers = st.sidebar.slider("Number of Workers", 1, 20, default_workers)
 
@@ -256,23 +270,6 @@ def main():
     if uploaded_files:
         st.header("🚀 Convert to Markdown")
 
-        # Custom style for the button
-        st.markdown(
-            """
-            <style>
-            div.stButton > button:first-child {
-                background-color: #28a745 !important;
-                color: white !important;
-                border: none !important;
-                border-radius: 5px !important;
-                padding: 0.5em 2em !important;
-                font-size: 1.1em !important;
-                font-weight: bold !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
         if st.button("Start Conversion", type="primary", use_container_width=True):
             if not check_vllm_server_status(vllm_base_url):
                 st.error("❌ vLLM server is not accessible. Please check the server status and ensure it's running.")
