@@ -177,7 +177,6 @@ def main():
 
     # Display workspace directory in sidebar
     st.sidebar.subheader("📁 Workspace")
-    st.sidebar.info(f"Working directory: {workspace_dir}")
 
     # Check for existing results
     results_dir = os.path.join(workspace_dir, "results")
@@ -378,6 +377,18 @@ def main():
                                 md_file = markdown_files[0]
                                 with open(md_file, "r", encoding="utf-8") as f:
                                     markdown_content = f.read()
+
+                                # Replace LaTeX delimiters for Streamlit compatibility
+                                def latex_replace(md):
+                                    import re
+
+                                    # Replace \[ ... \] with $$ ... $$
+                                    md = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", md, flags=re.DOTALL)
+                                    # Replace \( ... \) with $ ... $
+                                    md = re.sub(r"\\\((.*?)\\\)", r"$\1$", md, flags=re.DOTALL)
+                                    return md
+
+                                markdown_content = latex_replace(markdown_content)
 
                                 # Download button above preview
                                 st.download_button(label="⬇️ Download Markdown", data=markdown_content, file_name="output.md", mime="text/markdown")
