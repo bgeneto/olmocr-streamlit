@@ -16,7 +16,9 @@ services:
       vllm-server:
         condition: service_healthy
     command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    networks:
+      - vllm
 
-volumes:
-  vllm_cache:
-    driver: local
+networks:
+  vllm:
+    external: true
