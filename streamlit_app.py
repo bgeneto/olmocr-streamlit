@@ -133,17 +133,9 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
 
     pdf_paths = []
 
-    # Instead of using session directories, use unique filenames to avoid conflicts
-    import uuid
-    import time
-
-    session_timestamp = int(time.time())
-    session_id = str(uuid.uuid4())[:8]
-
     for pdf_file in pdf_files:
-        # Create a unique filename that combines timestamp, session ID, and original name
-        unique_filename = f"{session_timestamp}_{session_id}_{pdf_file.name}"
-        pdf_path = os.path.join(pdf_dir, unique_filename)
+        # Use original filename since workspace is cleaned before each conversion
+        pdf_path = os.path.join(pdf_dir, pdf_file.name)
 
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
