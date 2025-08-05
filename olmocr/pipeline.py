@@ -1185,6 +1185,7 @@ async def main():
     parser.add_argument("--target_longest_image_dim", type=int, help="Dimension on longest side to use for rendering the pdf pages", default=1288)
     parser.add_argument("--target_anchor_text_len", type=int, help="Maximum amount of anchor text to use (characters), not used for new models", default=-1)
     parser.add_argument("--guided_decoding", action="store_true", help="Enable guided decoding for model YAML type outputs")
+    parser.add_argument("--languages_to_keep", type=str, default="ENGLISH", help="Comma-separated list of allowed languages (e.g. ENGLISH,PORTUGUESE,SPANISH)")
 
     vllm_group = parser.add_argument_group(
         "VLLM arguments", "These arguments are passed to vLLM. Any unrecognized arguments are also automatically forwarded to vLLM."
@@ -1220,6 +1221,9 @@ async def main():
     beaker_group.add_argument("--beaker_priority", type=str, default="normal", help="Beaker priority level for the job")
 
     args, unknown_args = parser.parse_known_args()
+
+    # Convert comma-separated string to Language objects
+    languages_to_keep = [getattr(Language, lang.strip().upper()) for lang in args.languages_to_keep.split(",") if hasattr(Language, lang.strip().upper())]
 
     logger.info(
         "If you run out of GPU memory during start-up or get 'KV cache is larger than available memory' errors, retry with lower values, e.g. --gpu_memory_utilization 0.80  --max_model_len 16384"
@@ -1352,7 +1356,7 @@ async def main():
 
     logger.info(f"Starting pipeline with PID {os.getpid()}")
 
-    # Download the model before you do anything else (only if starting local server)
+    # Download the model before you do anything else (only if starting local vLLM server)
     if not args.vllm_base_url:
         model_name_or_path = await download_model(args.model)
         logger.info(f"Downloaded model to: {model_name_or_path}")

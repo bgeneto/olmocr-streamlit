@@ -155,7 +155,11 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
         cmd.append("--guided_decoding")
     if kwargs.get("workers"):
         cmd.extend(["--workers", str(kwargs["workers"])])
-    # ...existing code...
+    # Add languages_to_keep argument if provided
+    if kwargs.get("languages_to_keep"):
+        # Convert Language enum to names (e.g. ENGLISH,PORTUGUESE)
+        langs_arg = ",".join([l.name for l in kwargs["languages_to_keep"]])
+        cmd.extend(["--languages_to_keep", langs_arg])
     return cmd, pdf_paths
 
 
