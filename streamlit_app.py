@@ -395,7 +395,7 @@ def main():
 
                             else:
                                 # Multiple files - create zip
-                                st.subheader("📦 Multiple Files")
+                                st.subheader("\U0001f4e6 Multiple Files")
 
                                 # Create zip file
                                 zip_path = os.path.join(workspace_dir, "markdown_files.zip")
@@ -410,19 +410,47 @@ def main():
                                     zip_data = f.read()
 
                                 st.download_button(
-                                    label=f"📁 Download All ({len(markdown_files)} files as ZIP)",
+                                    label=f"\U0001f4c1 Download All ({len(markdown_files)} files as ZIP)",
                                     data=zip_data,
                                     file_name="olmocr_markdown_files.zip",
                                     mime="application/zip",
                                 )
 
                                 # Show file list
-                                with st.expander("📋 Converted Files", expanded=True):
+                                with st.expander("\U0001f4cb Converted Files", expanded=True):
                                     for md_file in markdown_files:
                                         filename = os.path.basename(md_file)
                                         file_size = os.path.getsize(md_file)
                                         st.write(f"• {filename} ({file_size/1024:.1f} KB)")
 
+                                # Tabs for previewing up to 5 files
+                                max_preview_files = 5
+                                preview_files = markdown_files[:max_preview_files]
+                                if preview_files:
+                                    st.subheader(f"\U0001f4dd Preview (first {max_preview_files} files)")
+                                    tab_labels = [os.path.basename(f) for f in preview_files]
+                                    tabs = st.tabs(tab_labels)
+                                    preview_char_limit = 5000  # Limit preview to first 5000 chars
+                                    for i, md_file in enumerate(preview_files):
+                                        with open(md_file, "r", encoding="utf-8") as f:
+                                            markdown_content = f.read()
+
+                                        # Replace LaTeX delimiters for Streamlit compatibility
+                                        def latex_replace(md):
+                                            import re
+
+                                            md = re.sub(r"\\\[(.*?)\\\]", r"$$\\1$$", md, flags=re.DOTALL)
+                                            md = re.sub(r"\\\((.*?)\\\)", r"$\\1$", md, flags=re.DOTALL)
+                                            return md
+
+                                        markdown_content = latex_replace(markdown_content)
+                                        preview_content = markdown_content[:preview_char_limit]
+                                        with tabs[i]:
+                                            st.markdown(f"**Preview limited to first {preview_char_limit} characters.**")
+                                            st.markdown(preview_content, unsafe_allow_html=False)
+                                            if len(markdown_content) > preview_char_limit:
+                                                with st.expander("Show full content (may be slow)"):
+                                                    st.markdown(markdown_content, unsafe_allow_html=False)
                         else:
                             st.warning("⚠️ Conversion completed but no markdown files were generated.")
 
