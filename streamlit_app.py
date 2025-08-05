@@ -362,18 +362,23 @@ def main():
 
                 # Execute conversion
                 with st.expander("📋 Conversion Log", expanded=True):
-                    log_text = st.empty()
+                    log_container = st.container()
+
                     # Set up logging to capture detailed output
                     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
 
                     log_lines = []
                     error_count = 0
                     connection_errors = 0
+                    max_log_lines = 500  # Limit to prevent memory issues
 
                     # Check if process started successfully
                     if process.stdout is None:
                         st.error("❌ Failed to start conversion process")
                         return
+
+                    with log_container:
+                        log_text = st.empty()
 
                     while True:
                         output = process.stdout.readline()
@@ -382,12 +387,18 @@ def main():
                         if output:
                             line = output.strip()
                             log_lines.append(line)
+
+                            # Keep only the last max_log_lines entries (tail behavior)
+                            if len(log_lines) > max_log_lines:
+                                log_lines = log_lines[-max_log_lines:]
+
                             # Count different types of errors for better user feedback
                             if "ERROR" in line or "💥" in line or "❌" in line:
                                 error_count += 1
                             if "CONNECTION ERROR" in line or "🔌" in line:
                                 connection_errors += 1
-                            # Show all log lines in a scrollable textarea
+
+                            # Format log lines with icons
                             formatted_log = []
                             for log_line in log_lines:
                                 if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
@@ -398,7 +409,22 @@ def main():
                                     formatted_log.append(f"✅ {log_line}")
                                 else:
                                     formatted_log.append(log_line)
-                            log_text.text_area("Conversion Log (Verbose)", value="\n".join(formatted_log), height=400, disabled=True)
+
+                            # Create the log content with tail behavior
+                            log_content = "\n".join(formatted_log)
+
+                            # Add a marker at the end to indicate live tail
+                            timestamp = datetime.now().strftime("%H:%M:%S")
+                            log_content += f"\n\n📡 Live tail - Last update: {timestamp}"
+
+                            # Update the text area with changing key to force scroll to bottom
+                            log_text.text_area(
+                                "Conversion Log (Live Tail - Latest 500 lines)",
+                                value=log_content,
+                                height=400,
+                                disabled=True,
+                                key=f"log_tail_{len(log_lines)}",  # Changing key forces re-render at bottom
+                            )
                 return_code = process.poll()
 
                 progress_bar.progress(80)
@@ -407,7 +433,6 @@ def main():
                 if return_code == 0:
                     # Check for generated markdown files
                     markdown_dir = os.path.join(workspace_dir, "markdown")
-                    st.info(f"🔍 Looking for markdown files in: {markdown_dir}")
 
                     if os.path.exists(markdown_dir):
                         # Find all markdown files
@@ -417,7 +442,7 @@ def main():
                                 if file.endswith(".md"):
                                     markdown_files.append(os.path.join(root, file))
 
-                        st.info(f"📄 Found {len(markdown_files)} markdown files in {markdown_dir}")
+                        st.info(f"🔍 Found {len(markdown_files)} markdown files in {markdown_dir}")
 
                         # Apply LaTeX corrections to markdown files in-place
                         process_markdown_files_inplace(markdown_files)
