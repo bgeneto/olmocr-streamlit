@@ -100,6 +100,14 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
         results_dir = os.path.join(workspace_dir, "results")
         markdown_dir = os.path.join(workspace_dir, "markdown")
 
+        # Clear PDF directory to prevent processing old files
+        if os.path.exists(pdf_dir):
+            existing_pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith(".pdf")]
+            if existing_pdf_files:
+                st.info(f"🧹 Clearing {len(existing_pdf_files)} previous PDF files from: {pdf_dir}")
+            shutil.rmtree(pdf_dir)
+            os.makedirs(pdf_dir, exist_ok=True)
+
         # Clear results directory
         if os.path.exists(results_dir):
             existing_files = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
@@ -119,12 +127,23 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
             shutil.rmtree(markdown_dir)
 
     pdf_paths = []
+
+    # Create a unique temporary directory for this conversion session to avoid conflicts
+    import uuid
+
+    session_id = str(uuid.uuid4())[:8]
+    session_pdf_dir = os.path.join(pdf_dir, f"session_{session_id}")
+    os.makedirs(session_pdf_dir, exist_ok=True)
+
     for pdf_file in pdf_files:
-        # Save using safe filename under /workspace/pdfs
-        pdf_path = os.path.join(pdf_dir, pdf_file.name)
+        # Save using safe filename under session-specific directory
+        pdf_path = os.path.join(session_pdf_dir, pdf_file.name)
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
         pdf_paths.append(pdf_path)
+
+    st.info(f"📁 Created session directory: {session_pdf_dir}")
+    st.info(f"📄 Processing {len(pdf_paths)} PDF file(s): {[os.path.basename(p) for p in pdf_paths]}")
 
     # Build olmOCR command - workspace_dir used for run-specific temp artifacts
     cmd = [
@@ -160,7 +179,20 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
         # Convert Language enum to names (e.g. ENGLISH,PORTUGUESE)
         langs_arg = ",".join([l.name for l in kwargs["languages_to_keep"]])
         cmd.extend(["--languages_to_keep", langs_arg])
-    return cmd, pdf_paths
+        st.info(f"🌐 Language filtering enabled. Allowed languages: {langs_arg}")
+    else:
+        st.info("🌐 No language filtering applied - all languages will be processed")
+
+    # Add cleanup function for session directory
+    def cleanup_session_files():
+        try:
+            if os.path.exists(session_pdf_dir):
+                shutil.rmtree(session_pdf_dir)
+                st.info(f"🧹 Cleaned up session directory: {session_pdf_dir}")
+        except Exception as e:
+            st.warning(f"⚠️ Could not clean up session directory: {e}")
+
+    return cmd, pdf_paths, cleanup_session_files
 
 
 def latex_replace(md):
@@ -174,8 +206,8 @@ def latex_replace(md):
 
 
 def main():
-    st.title("📄 olmOCR: PDF to Markdown Converter")
-    st.markdown("Convert PDF documents to Markdown using visual language models")
+    st.title("📄 PDF to Markdown Converter")
+    st.markdown("Convert PDF documents to Markdown using visual language models.")
 
     # Language selection sidebar
     st.sidebar.subheader("Supported Languages")
@@ -216,23 +248,52 @@ def main():
 
     # Check for existing results
     results_dir = os.path.join(workspace_dir, "results")
+    workspace_root, pdf_dir, outputs_dir = get_workspace_dirs()
+
     if os.path.exists(results_dir):
         existing_results = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
         if existing_results:
             st.sidebar.warning(f"⚠️ Found {len(existing_results)} previous result file(s)")
             st.sidebar.caption("Enable 'Force Reprocessing' to clear these and start fresh")
 
+    # Check for accumulated PDF files
+    if os.path.exists(pdf_dir):
+        existing_pdfs = [f for f in os.listdir(pdf_dir) if f.endswith(".pdf")]
+        session_dirs = [d for d in os.listdir(pdf_dir) if d.startswith("session_") and os.path.isdir(os.path.join(pdf_dir, d))]
+        if existing_pdfs or session_dirs:
+            st.sidebar.warning(f"⚠️ Found {len(existing_pdfs)} PDF files + {len(session_dirs)} session directories")
+            st.sidebar.caption("Old PDF files may interfere with processing")
+
             # Add manual clear button
-            if st.sidebar.button("🗑️ Clear Workspace Now"):
+            if st.sidebar.button("🗑️ Clear All Workspace Data"):
                 try:
-                    shutil.rmtree(results_dir)
+                    if os.path.exists(results_dir):
+                        shutil.rmtree(results_dir)
                     markdown_dir = os.path.join(workspace_dir, "markdown")
                     if os.path.exists(markdown_dir):
                         shutil.rmtree(markdown_dir)
-                    st.sidebar.success("✅ Workspace cleared!")
+                    if os.path.exists(pdf_dir):
+                        shutil.rmtree(pdf_dir)
+                        os.makedirs(pdf_dir, exist_ok=True)
+                    st.sidebar.success("✅ All workspace data cleared!")
                     st.rerun()
                 except Exception as e:
                     st.sidebar.error(f"❌ Error clearing workspace: {e}")
+    else:
+        if os.path.exists(results_dir):
+            existing_results = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
+            if existing_results:
+                # Add manual clear button for just results
+                if st.sidebar.button("🗑️ Clear Workspace Now"):
+                    try:
+                        shutil.rmtree(results_dir)
+                        markdown_dir = os.path.join(workspace_dir, "markdown")
+                        if os.path.exists(markdown_dir):
+                            shutil.rmtree(markdown_dir)
+                        st.sidebar.success("✅ Workspace cleared!")
+                        st.rerun()
+                    except Exception as e:
+                        st.sidebar.error(f"❌ Error clearing workspace: {e}")
         else:
             st.sidebar.success("✨ No previous results found")
 
@@ -310,6 +371,7 @@ def main():
                 st.error("❌ vLLM server is not accessible. Please check the server status and ensure it's running.")
                 return
 
+            cleanup_session_files = None  # Initialize cleanup function
             try:
                 # Progress tracking
                 progress_bar = st.progress(0)
@@ -319,7 +381,7 @@ def main():
                 progress_bar.progress(10)
 
                 # Run conversion
-                cmd, pdf_paths = run_olmocr_conversion(
+                cmd, pdf_paths, cleanup_session_files = run_olmocr_conversion(
                     uploaded_files,
                     workspace_dir,
                     vllm_base_url,
@@ -503,6 +565,13 @@ def main():
 
             except Exception as e:
                 st.error(f"❌ An error occurred during conversion: {str(e)}")
+            finally:
+                # Clean up session files regardless of success/failure/exception
+                if cleanup_session_files is not None:
+                    try:
+                        cleanup_session_files()
+                    except Exception as cleanup_error:
+                        st.warning(f"⚠️ Failed to cleanup session files: {cleanup_error}")
 
     # Footer
     st.markdown("---")

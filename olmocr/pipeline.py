@@ -86,8 +86,24 @@ tracker = WorkerTracker()
 # Process pool for offloading cpu bound work, like calculating anchor texts, max 32 workers, otherwise it can spawn way too many workers on a big machine
 process_pool = ProcessPoolExecutor(max_workers=min(multiprocessing.cpu_count() // 2 + 1, 32), mp_context=multiprocessing.get_context("spawn"))
 
-# Filter object, cached so it will only get loaded when/if you need it
-get_pdf_filter = cache(lambda: PdfFilter(languages_to_keep={Language.ENGLISH, None}, apply_download_spam_check=True, apply_form_check=True))
+# Filter object, will be initialized later with actual languages from command line args
+pdf_filter = None
+
+
+def get_pdf_filter():
+    """Get the PDF filter instance, initialized with the current language settings"""
+    global pdf_filter
+    if pdf_filter is None:
+        # Fallback to English only if not initialized
+        pdf_filter = PdfFilter(languages_to_keep={Language.ENGLISH, None}, apply_download_spam_check=True, apply_form_check=True)
+    return pdf_filter
+
+
+def initialize_pdf_filter(languages_to_keep):
+    """Initialize PDF filter with specified languages"""
+    global pdf_filter
+    pdf_filter = PdfFilter(languages_to_keep=set(languages_to_keep + [None]), apply_download_spam_check=True, apply_form_check=True)
+
 
 # Specify a default port, but it can be overridden by args
 BASE_SERVER_PORT = 30024
@@ -475,7 +491,7 @@ async def process_pdf(args, worker_id: int, pdf_orig_path: str):
         logger.info(f"Got {num_pages} pages to do for {pdf_orig_path} in worker {worker_id}")
 
         if args.apply_filter and get_pdf_filter().filter_out_pdf(tf.name):
-            logger.info(f"Filtering out pdf {pdf_orig_path}")
+            logger.info(f"🚫 Filtering out pdf {pdf_orig_path} (language or content filter)")
             return None
 
         # List to hold the tasks for processing each page
@@ -1224,6 +1240,11 @@ async def main():
 
     # Convert comma-separated string to Language objects
     languages_to_keep = [getattr(Language, lang.strip().upper()) for lang in args.languages_to_keep.split(",") if hasattr(Language, lang.strip().upper())]
+
+    # Initialize PDF filter with the actual languages from command line args
+    initialize_pdf_filter(languages_to_keep)
+
+    logger.info(f"🌐 PDF filter initialized with languages: {[lang.name if lang else 'None' for lang in languages_to_keep + [None]]}")
 
     logger.info(
         "If you run out of GPU memory during start-up or get 'KV cache is larger than available memory' errors, retry with lower values, e.g. --gpu_memory_utilization 0.80  --max_model_len 16384"
