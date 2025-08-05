@@ -1,56 +1,24 @@
 services:
-  vllm-server:
-    image: vllm/vllm-openai:latest
-    container_name: olmocr-vllm-server
-    ports:
-      - "30024:8000"
-    volumes:
-      - vllm_cache:/root/.cache
-      - ./models:/models
-    environment:
-      - CUDA_VISIBLE_DEVICES=0
-    command: >
-      --model allenai/olmOCR-7B-0725-FP8
-      --port 8000
-      --disable-log-requests
-      --uvicorn-log-level warning
-      --served-model-name olmocr
-      --tensor-parallel-size 1
-      --data-parallel-size 1
-      --gpu-memory-utilization 0.9
-      --max-model-len 16384
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 300s # Allow 5 minutes for model loading
+  olmocr-streamlit-app:
+  build:
+    context: .
+    dockerfile: Dockerfile.streamlit
+  container_name: olmocr-streamlit-app
+  ports:
+    - "8006:8501"
+  volumes:
+    - ./workspace:/workspace
+    - .:/app
+  environment:
+    - PYTHONPATH=/app
+    - VLLM_BASE_URL=http://vllm1:8000
+  depends_on:
+    vllm-server:
+      condition: service_healthy
+  command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+  networks:
+    - vllm
 
-  streamlit-app:
-    build:
-      context: .
-      dockerfile: Dockerfile.streamlit
-    container_name: olmocr-streamlit-app
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./workspace:/workspace
-      - .:/app
-    environment:
-      - PYTHONPATH=/app
-      - VLLM_BASE_URL=http://vllm-server:8000
-    depends_on:
-      vllm-server:
-        condition: service_healthy
-    command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
-
-volumes:
-  vllm_cache:
-    driver: local
+networks:
+  vllm:
+    external: true
