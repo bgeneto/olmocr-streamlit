@@ -14,14 +14,14 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY README.md ./
 
+# Copy application code
+COPY . .
+
 # Install olmOCR
 RUN pip install .
 
 # Install additional dependencies for Streamlit app
 RUN pip install streamlit requests
-
-# Copy application code
-COPY . .
 
 # Create workspace directory
 RUN mkdir -p /workspace
