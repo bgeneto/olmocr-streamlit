@@ -103,22 +103,17 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     # Clear work index file (this tracks which files have been processed)
     if os.path.exists(work_index_file):
         os.remove(work_index_file)
-        st.info(f"🧹 Cleared work index file")
 
     # Clear PDF directory to prevent processing old files
     if os.path.exists(pdf_dir):
-        existing_pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith(".pdf")]
-        if existing_pdf_files:
-            st.info(f"🧹 Clearing {len(existing_pdf_files)} previous PDF files")
         shutil.rmtree(pdf_dir)
         os.makedirs(pdf_dir, exist_ok=True)
 
     # Clear results directory
     if os.path.exists(results_dir):
-        existing_files = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
-        if existing_files:
-            st.info(f"🧹 Clearing {len(existing_files)} previous result files")
         shutil.rmtree(results_dir)
+
+    st.info(f"🧹 Clearing workspace files...")
 
     # Clear markdown directory too for a fresh start
     if os.path.exists(markdown_dir):
@@ -127,8 +122,6 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
             for file in files:
                 if file.endswith(".md"):
                     existing_md_files.append(file)
-        if existing_md_files:
-            st.info(f"🧹 Clearing {len(existing_md_files)} previous markdown files")
         shutil.rmtree(markdown_dir)
 
     pdf_paths = []
@@ -141,7 +134,6 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
             f.write(pdf_file.getbuffer())
         pdf_paths.append(pdf_path)
 
-    st.info(f"📁 Saving files to: {pdf_dir}")
     st.info(f"📄 Processing {len(pdf_paths)} PDF file(s): {[os.path.basename(p) for p in pdf_paths]}")
 
     # Build olmOCR command - workspace_dir used for run-specific temp artifacts
@@ -171,6 +163,8 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
         cmd.append("--apply_filter")
     if kwargs.get("guided_decoding"):
         cmd.append("--guided_decoding")
+    if kwargs.get("add_page_numbers"):
+        cmd.append("--add_page_numbers")
     if kwargs.get("workers"):
         cmd.extend(["--workers", str(kwargs["workers"])])
     # Add languages_to_keep argument if provided
@@ -190,8 +184,6 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
                 if os.path.exists(pdf_path):
                     os.remove(pdf_path)
                     files_cleaned += 1
-            if files_cleaned > 0:
-                st.info(f"🧹 Cleaned up {files_cleaned} session file(s)")
         except Exception as e:
             st.warning(f"⚠️ Could not clean up session files: {e}")
 
@@ -255,7 +247,7 @@ def main():
     }
     default_langs = ["English", "Portuguese", "Spanish"]
     selected_langs = st.sidebar.multiselect(
-        "Select allowed document languages:", options=list(language_options.keys()), default=default_langs, help="PDFs in other languages will be filtered out."
+        "Document languages:", options=list(language_options.keys()), default=default_langs, help="PDFs in other languages will be filtered out."
     )
     languages_to_keep = [language_options[l] for l in selected_langs]
 
@@ -271,11 +263,6 @@ def main():
 
     # Sidebar configuration
     st.sidebar.header("⚙️ Configuration")
-
-    # Display workspace directory in sidebar
-    st.sidebar.subheader("📁 Workspace")
-    st.sidebar.info(f"Workspace: {workspace_dir}")
-    st.sidebar.caption("All previous results are automatically cleared before each conversion.")
 
     # Server status in sidebar
     st.sidebar.subheader("Server Status")
@@ -318,11 +305,14 @@ def main():
         value=False,
         help="Use guided decoding to improve Markdown output quality by leveraging document structure hints. See olmOCR docs for more info.",
     )
+    add_page_numbers = st.sidebar.checkbox(
+        "Add Page Numbers to Markdown",
+        value=False,
+        help="Add page number headers (e.g., '--- Page 1 ---') to the markdown output for easier navigation.",
+    )
 
     # Main interface
     st.header("📁 Upload PDF Files")
-
-    st.info("💡 **Tip:** The workspace is automatically cleaned before each conversion to ensure fresh results.")
 
     # File uploader
     uploaded_files = st.file_uploader("Choose PDF files", type=["pdf"], accept_multiple_files=True, help="Upload one or more PDF files to convert to Markdown")
@@ -343,6 +333,9 @@ def main():
                 return
 
             cleanup_session_files = None  # Initialize cleanup function
+            # Start timing the conversion process
+            conversion_start_time = time.time()
+
             try:
                 # Progress tracking
                 progress_bar = st.progress(0)
@@ -361,6 +354,7 @@ def main():
                     guided_decoding=guided_decoding,
                     workers=workers,
                     languages_to_keep=languages_to_keep,
+                    add_page_numbers=add_page_numbers,
                 )
 
                 status_text.text("🚀 Running olmOCR conversion...")
@@ -434,6 +428,17 @@ def main():
                         if markdown_files:
                             st.success(f"🎉 Successfully converted {len(markdown_files)} PDF file(s) to Markdown!")
 
+                            # Calculate and display conversion time
+                            conversion_end_time = time.time()
+                            conversion_duration = conversion_end_time - conversion_start_time
+                            minutes = int(conversion_duration // 60)
+                            seconds = int(conversion_duration % 60)
+                            if minutes > 0:
+                                time_str = f"{minutes}m {seconds}s"
+                            else:
+                                time_str = f"{seconds}s"
+                            st.info(f"⏱️ **Conversion completed in {time_str}**")
+
                             # Results section
                             st.header("📥 Download Results")
 
@@ -485,7 +490,13 @@ def main():
 
                                 st.subheader("📄 Markdown Preview")
                                 with st.expander("View Markdown Content", expanded=True):
-                                    st.markdown(markdown_content, unsafe_allow_html=False)
+                                    preview_char_limit = 5000  # Limit preview to first 5000 chars
+                                    preview_content = markdown_content[:preview_char_limit]
+                                    st.markdown(f"**Preview limited to first {preview_char_limit} characters.**")
+                                    st.markdown(preview_content, unsafe_allow_html=False)
+                                    if len(markdown_content) > preview_char_limit:
+                                        with st.expander("Show full content (may be slow)"):
+                                            st.markdown(markdown_content, unsafe_allow_html=False)
 
                             else:
                                 # Multiple files - create zip
@@ -575,9 +586,31 @@ def main():
                                                 with st.expander("Show full content (may be slow)"):
                                                     st.markdown(markdown_content, unsafe_allow_html=False)
                         else:
+                            # Calculate and display conversion time even for failed attempts
+                            conversion_end_time = time.time()
+                            conversion_duration = conversion_end_time - conversion_start_time
+                            minutes = int(conversion_duration // 60)
+                            seconds = int(conversion_duration % 60)
+                            if minutes > 0:
+                                time_str = f"{minutes}m {seconds}s"
+                            else:
+                                time_str = f"{seconds}s"
+                            st.info(f"⏱️ **Process completed in {time_str}**")
+
                             st.warning("⚠️ Conversion completed but no markdown files were generated.")
 
                     else:
+                        # Calculate and display conversion time even for failed attempts
+                        conversion_end_time = time.time()
+                        conversion_duration = conversion_end_time - conversion_start_time
+                        minutes = int(conversion_duration // 60)
+                        seconds = int(conversion_duration % 60)
+                        if minutes > 0:
+                            time_str = f"{minutes}m {seconds}s"
+                        else:
+                            time_str = f"{seconds}s"
+                        st.info(f"⏱️ **Process completed in {time_str}**")
+
                         st.warning(f"⚠️ Conversion completed but no markdown directory was created at: {markdown_dir}")
                         # Let's also check if there are any .md files in the workspace root or other locations
                         st.info("🔍 Searching for markdown files in workspace...")
@@ -596,11 +629,33 @@ def main():
                             st.error("❌ No markdown files found anywhere in the workspace")
 
                 else:
+                    # Calculate and display conversion time for failed conversions
+                    conversion_end_time = time.time()
+                    conversion_duration = conversion_end_time - conversion_start_time
+                    minutes = int(conversion_duration // 60)
+                    seconds = int(conversion_duration % 60)
+                    if minutes > 0:
+                        time_str = f"{minutes}m {seconds}s"
+                    else:
+                        time_str = f"{seconds}s"
+                    st.info(f"⏱️ **Process completed in {time_str}**")
+
                     progress_bar.progress(100)
                     status_text.text("❌ Conversion failed")
                     st.error(f"❌ Conversion failed with return code {return_code}")
 
             except Exception as e:
+                # Calculate and display conversion time for exceptions
+                conversion_end_time = time.time()
+                conversion_duration = conversion_end_time - conversion_start_time
+                minutes = int(conversion_duration // 60)
+                seconds = int(conversion_duration % 60)
+                if minutes > 0:
+                    time_str = f"{minutes}m {seconds}s"
+                else:
+                    time_str = f"{seconds}s"
+                st.info(f"⏱️ **Process completed in {time_str}**")
+
                 st.error(f"❌ An error occurred during conversion: {str(e)}")
             finally:
                 # Clean up session files regardless of success/failure/exception

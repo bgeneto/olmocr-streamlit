@@ -519,7 +519,7 @@ async def process_pdf(args, worker_id: int, pdf_orig_path: str):
                     f"Document {pdf_orig_path} processed with {num_fallback_pages} fallback pages out of {num_pages}, proceeding to build Dolma document."
                 )
 
-            return build_dolma_document(pdf_orig_path, page_results)
+            return build_dolma_document(pdf_orig_path, page_results, args)
         except Exception as e:
             # Check for ExceptionGroup with BrokenProcessPool
             if isinstance(e, ExceptionGroup):
@@ -537,7 +537,7 @@ async def process_pdf(args, worker_id: int, pdf_orig_path: str):
             os.unlink(tf.name)
 
 
-def build_dolma_document(pdf_orig_path, page_results):
+def build_dolma_document(pdf_orig_path, page_results, args=None):
     # Build the document text and page spans
     document_text = ""
     pdf_page_spans = []
@@ -545,9 +545,20 @@ def build_dolma_document(pdf_orig_path, page_results):
 
     for index, page_result in enumerate(page_results):
         if page_result.response.natural_text is not None:
-            content = page_result.response.natural_text + ("\n" if index < len(page_results) - 1 else "")
-        else:
+            # Add page number header if requested
             content = ""
+            if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
+                content += f"--- Page {page_result.page_num} ---\n\n"
+
+            content += page_result.response.natural_text
+            if index < len(page_results) - 1:
+                content += "\n"
+        else:
+            # Even for empty content, add page header if requested
+            if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
+                content = f"--- Page {page_result.page_num} ---\n\n"
+            else:
+                content = ""
 
         start_pos = current_char_pos
         document_text += content
@@ -1197,6 +1208,7 @@ async def main():
     parser.add_argument("--apply_filter", action="store_true", help="Apply basic filtering to English pdfs which are not forms, and not likely seo spam")
     parser.add_argument("--stats", action="store_true", help="Instead of running any job, reports some statistics about the current workspace")
     parser.add_argument("--markdown", action="store_true", help="Also write natural text to markdown files preserving the folder structure of the input pdfs")
+    parser.add_argument("--add_page_numbers", action="store_true", help="Add page number headers to markdown output (e.g., '--- Page 1 ---')")
 
     parser.add_argument("--target_longest_image_dim", type=int, help="Dimension on longest side to use for rendering the pdf pages", default=1288)
     parser.add_argument("--target_anchor_text_len", type=int, help="Maximum amount of anchor text to use (characters), not used for new models", default=-1)
