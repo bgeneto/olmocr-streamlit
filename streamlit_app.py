@@ -362,23 +362,23 @@ def main():
 
                 # Execute conversion
                 with st.expander("📋 Conversion Log", expanded=True):
-                    log_container = st.container()
-
                     # Set up logging to capture detailed output
                     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
 
                     log_lines = []
                     error_count = 0
                     connection_errors = 0
-                    max_log_lines = 500  # Limit to prevent memory issues
+                    max_log_lines = 100  # Reduced for better performance
+                    update_frequency = 5  # Update every 5 lines for smoother experience
 
                     # Check if process started successfully
                     if process.stdout is None:
                         st.error("❌ Failed to start conversion process")
                         return
 
-                    with log_container:
-                        log_text = st.empty()
+                    # Create container for live log updates
+                    log_placeholder = st.empty()
+                    line_count = 0
 
                     while True:
                         output = process.stdout.readline()
@@ -387,6 +387,7 @@ def main():
                         if output:
                             line = output.strip()
                             log_lines.append(line)
+                            line_count += 1
 
                             # Keep only the last max_log_lines entries (tail behavior)
                             if len(log_lines) > max_log_lines:
@@ -398,33 +399,38 @@ def main():
                             if "CONNECTION ERROR" in line or "🔌" in line:
                                 connection_errors += 1
 
-                            # Format log lines with icons
-                            formatted_log = []
-                            for log_line in log_lines:
-                                if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
-                                    formatted_log.append(f"🔥 {log_line}")
-                                elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
-                                    formatted_log.append(f"⚠️ {log_line}")
-                                elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
-                                    formatted_log.append(f"✅ {log_line}")
-                                else:
-                                    formatted_log.append(log_line)
-
-                            # Create the log content with tail behavior
-                            log_content = "\n".join(formatted_log)
-
-                            # Add a marker at the end to indicate live tail
-                            timestamp = datetime.now().strftime("%H:%M:%S")
-                            log_content += f"\n\n📡 Live tail - Last update: {timestamp}"
-
-                            # Update the text area with changing key to force scroll to bottom
-                            log_text.text_area(
-                                "Conversion Log (Live Tail - Latest 500 lines)",
-                                value=log_content,
-                                height=400,
-                                disabled=True,
-                                key=f"log_tail_{len(log_lines)}",  # Changing key forces re-render at bottom
+                            # Update display every few lines or on important messages
+                            should_update = line_count % update_frequency == 0 or any(
+                                keyword in line.upper() for keyword in ["ERROR", "SUCCESS", "COMPLETED", "FAILED", "WARNING"]
                             )
+
+                            if should_update or process.poll() is not None:
+                                # Format log lines with icons
+                                formatted_log = []
+                                for log_line in log_lines:
+                                    if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
+                                        formatted_log.append(f"🔥 {log_line}")
+                                    elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
+                                        formatted_log.append(f"⚠️ {log_line}")
+                                    elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
+                                        formatted_log.append(f"✅ {log_line}")
+                                    else:
+                                        formatted_log.append(log_line)
+
+                                # Create the log content with tail behavior
+                                log_content = "\n".join(formatted_log)
+
+                                # Add status info at the end
+                                timestamp = datetime.now().strftime("%H:%M:%S")
+                                status_info = f"\n\n📡 Live updates • Lines: {len(log_lines)}/{line_count} • Last: {timestamp}"
+                                if error_count > 0:
+                                    status_info += f" • 🔥 Errors: {error_count}"
+                                log_content += status_info
+
+                                # Use markdown code block for better formatting and scroll behavior
+                                with log_placeholder.container():
+                                    st.markdown("**Conversion Log (Latest 100 lines)**")
+                                    st.code(log_content, language=None)
                 return_code = process.poll()
 
                 progress_bar.progress(80)
