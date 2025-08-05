@@ -384,7 +384,7 @@ def main():
 
                                 st.subheader("📄 Preview")
                                 with st.expander("View Markdown Content", expanded=True):
-                                    st.markdown(r"""{}""".format(markdown_content), unsafe_allow_html=False)
+                                    st.markdown(markdown_content, unsafe_allow_html=False)
 
                             else:
                                 # Multiple files - create zip
