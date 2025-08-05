@@ -110,7 +110,7 @@ def build_finetuning_prompt(base_text: str) -> str:
 def build_no_anchoring_yaml_prompt() -> str:
     return (
         "Attached is one page of a document that you must process. "
-        "Just return the plain text representation of this document as if you were reading it naturally. Convert equations to LateX and tables to markdown.\n"
+        "Just return the plain text representation of this document as if you were reading it naturally. Convert equations to LaTeX and tables to markdown. Detect single line larger or bolder piece of text and prefix then with markdown headings like '# 1. Introduction'.\n"
         "Return your output as markdown, with a front matter section on top specifying values for the primary_language, is_rotation_valid, rotation_correction, is_table, and is_diagram parameters."
     )
 

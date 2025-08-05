@@ -1,6 +1,6 @@
 def build_basic_prompt() -> str:
     return """Please provide a natural, plain text representation of the document, formatted in Markdown.
-        - Identify bold/strong/larger texts in order to use appropriate markdown sections (#, ##, ###, etc) to structure the content
+        - Identify bold/strong or large single line texts and prefix them with appropriate markdown sections (#, ##, ###, etc), e.g. '# 1. Introduction'
         - Skip page headers and footers (page numbers, running headers)
         - For ALL mathematical expressions, use LaTeX notation with \( and \) for inline equations and \[ and \] for display equations
         - Convert any tables into Markdown format
