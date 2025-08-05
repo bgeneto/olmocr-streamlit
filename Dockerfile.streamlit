@@ -14,8 +14,8 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY README.md ./
 
-# Install olmOCR in development mode
-RUN pip install -e .
+# Install olmOCR
+RUN pip install .
 
 # Install additional dependencies for Streamlit app
 RUN pip install streamlit requests
