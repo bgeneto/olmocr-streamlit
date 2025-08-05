@@ -423,8 +423,45 @@ def main():
 
                                 markdown_content = latex_replace(markdown_content)
 
-                                # Download button above preview
-                                st.download_button(label="⬇️ Download Markdown", data=markdown_content, file_name="output.md", mime="text/markdown")
+                                # Auto-download prompt with prominent download button
+                                st.info("📥 **Your file is ready!** Click the button below to download:")
+
+                                # Create a more prominent download button
+                                download_col1, download_col2, download_col3 = st.columns([1, 2, 1])
+                                with download_col2:
+                                    st.download_button(
+                                        label="⬇️ Download Markdown File",
+                                        data=markdown_content,
+                                        file_name=f"{os.path.splitext(uploaded_files[0].name)[0]}.md",
+                                        mime="text/markdown",
+                                        type="primary",
+                                        use_container_width=True,
+                                    )
+
+                                # JavaScript to focus on the download button (best we can do for "auto-download")
+                                st.markdown(
+                                    """
+                                <script>
+                                // Auto-focus on download button and add visual emphasis
+                                setTimeout(function() {
+                                    const downloadBtn = document.querySelector('[data-testid="stDownloadButton"] button');
+                                    if (downloadBtn) {
+                                        downloadBtn.focus();
+                                        downloadBtn.style.animation = 'pulse 2s infinite';
+                                        downloadBtn.style.boxShadow = '0 0 20px rgba(255, 75, 75, 0.6)';
+                                    }
+                                }, 500);
+                                </script>
+                                <style>
+                                @keyframes pulse {
+                                    0% { transform: scale(1); }
+                                    50% { transform: scale(1.05); }
+                                    100% { transform: scale(1); }
+                                }
+                                </style>
+                                """,
+                                    unsafe_allow_html=True,
+                                )
 
                                 st.subheader("📄 Markdown Preview")
                                 with st.expander("View Markdown Content", expanded=True):
@@ -432,7 +469,7 @@ def main():
 
                             else:
                                 # Multiple files - create zip
-                                st.subheader("\U0001f4e6 Multiple Files")
+                                st.subheader("📦 Multiple Files")
 
                                 # Create zip file
                                 zip_path = os.path.join(workspace_dir, "markdown_files.zip")
@@ -442,15 +479,48 @@ def main():
                                         rel_path = os.path.relpath(md_file, markdown_dir)
                                         zipf.write(md_file, rel_path)
 
-                                # Offer zip download
+                                # Read zip data
                                 with open(zip_path, "rb") as f:
                                     zip_data = f.read()
 
-                                st.download_button(
-                                    label=f"\U0001f4c1 Download All ({len(markdown_files)} files as ZIP)",
-                                    data=zip_data,
-                                    file_name="olmocr_markdown_files.zip",
-                                    mime="application/zip",
+                                # Auto-download prompt with prominent download button
+                                st.info(f"📦 **Your {len(markdown_files)} files are ready!** Click the button below to download as ZIP:")
+
+                                # Create a more prominent download button
+                                download_col1, download_col2, download_col3 = st.columns([1, 2, 1])
+                                with download_col2:
+                                    st.download_button(
+                                        label=f"📁 Download ZIP ({len(markdown_files)} files)",
+                                        data=zip_data,
+                                        file_name=f"olmocr_converted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                        mime="application/zip",
+                                        type="primary",
+                                        use_container_width=True,
+                                    )
+
+                                # JavaScript to focus on the download button and add visual emphasis
+                                st.markdown(
+                                    """
+                                <script>
+                                // Auto-focus on download button and add visual emphasis
+                                setTimeout(function() {
+                                    const downloadBtn = document.querySelector('[data-testid="stDownloadButton"] button');
+                                    if (downloadBtn) {
+                                        downloadBtn.focus();
+                                        downloadBtn.style.animation = 'pulse 2s infinite';
+                                        downloadBtn.style.boxShadow = '0 0 20px rgba(255, 75, 75, 0.6)';
+                                    }
+                                }, 500);
+                                </script>
+                                <style>
+                                @keyframes pulse {
+                                    0% { transform: scale(1); }
+                                    50% { transform: scale(1.05); }
+                                    100% { transform: scale(1); }
+                                }
+                                </style>
+                                """,
+                                    unsafe_allow_html=True,
                                 )
 
                                 # Show file list
