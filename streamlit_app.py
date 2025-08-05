@@ -92,9 +92,6 @@ def check_vllm_server_status(base_url: str) -> bool:
 def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **kwargs):
     """Run olmOCR conversion on uploaded PDF files"""
 
-    # Save uploaded files to workspace/pdf directory
-    workspace_root, pdf_dir, outputs_dir = get_workspace_dirs()
-
     # Always clear previous results to ensure clean processing
     results_dir = os.path.join(workspace_dir, "results")
     markdown_dir = os.path.join(workspace_dir, "markdown")
@@ -103,11 +100,6 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     # Clear work index file (this tracks which files have been processed)
     if os.path.exists(work_index_file):
         os.remove(work_index_file)
-
-    # Clear PDF directory to prevent processing old files
-    if os.path.exists(pdf_dir):
-        shutil.rmtree(pdf_dir)
-        os.makedirs(pdf_dir, exist_ok=True)
 
     # Clear results directory
     if os.path.exists(results_dir):
@@ -124,11 +116,17 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
                     existing_md_files.append(file)
         shutil.rmtree(markdown_dir)
 
+    # Create a temporary directory for PDF files within the workspace
+    pdf_temp_dir = os.path.join(workspace_dir, "temp_pdfs")
+    if os.path.exists(pdf_temp_dir):
+        shutil.rmtree(pdf_temp_dir)
+    os.makedirs(pdf_temp_dir, exist_ok=True)
+
     pdf_paths = []
 
     for pdf_file in pdf_files:
-        # Use original filename since workspace is cleaned before each conversion
-        pdf_path = os.path.join(pdf_dir, pdf_file.name)
+        # Save PDF files to temporary directory within workspace
+        pdf_path = os.path.join(pdf_temp_dir, pdf_file.name)
 
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
@@ -179,11 +177,10 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     # Add cleanup function for the uploaded files
     def cleanup_session_files():
         try:
-            files_cleaned = 0
-            for pdf_path in pdf_paths:
-                if os.path.exists(pdf_path):
-                    os.remove(pdf_path)
-                    files_cleaned += 1
+            # Clean up the temporary PDF directory
+            if os.path.exists(pdf_temp_dir):
+                shutil.rmtree(pdf_temp_dir)
+                st.info(f"🧹 Cleaned up temporary PDF directory: {pdf_temp_dir}")
         except Exception as e:
             st.warning(f"⚠️ Could not clean up session files: {e}")
 
