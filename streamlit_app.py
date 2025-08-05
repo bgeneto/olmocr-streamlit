@@ -307,7 +307,7 @@ def main():
     )
     add_page_numbers = st.sidebar.checkbox(
         "Add Page Numbers to Markdown",
-        value=False,
+        value=True,
         help="Add page number headers (e.g., '- Page 1 -') to the markdown output for easier navigation.",
     )
 
