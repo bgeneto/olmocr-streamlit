@@ -291,7 +291,6 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
                 r"---\nprimary_language: (?:[a-z]{2}|null)\nis_rotation_valid: (?:True|False|true|false)\nrotation_correction: (?:0|90|180|270)\nis_table: (?:True|False|true|false)\nis_diagram: (?:True|False|true|false)\n(?:---|---\n[\s\S]+)"
             )
 
-        logger.info(f"📤 Sending request to server: {COMPLETION_URL}")
         logger.debug(f"📊 Query details: temperature={query['temperature']}, max_tokens={query['max_tokens']}")
 
         try:
@@ -548,7 +547,7 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
             # Add page number if requested
             content = ""
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content += f"\n(Page {page_result.page_num})\n"
+                content += f"\n(Page {page_result.page_num})\n\n"
 
             content += page_result.response.natural_text
             if index < len(page_results) - 1:
@@ -556,7 +555,7 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
         else:
             # Even for empty content, add page header if requested
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content = f"\n(Page {page_result.page_num})\n"
+                content = f"\n(Page {page_result.page_num})\n\n"
             else:
                 content = ""
 

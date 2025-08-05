@@ -13,7 +13,7 @@ services:
       - PYTHONPATH=/app
       - VLLM_BASE_URL=http://vllm1:8000
       - VLLM_API_KEY=${VLLM_API_KEY:-}
-    command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    command: streamlit run streamlit_app.py --browser.gatherUsageStats=false --server.port=8501 --server.address=0.0.0.0
     networks:
       - vllm
 
