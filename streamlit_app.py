@@ -273,6 +273,7 @@ def main():
                 if return_code == 0:
                     # Check for generated markdown files
                     markdown_dir = os.path.join(workspace_dir, "markdown")
+                    st.info(f"🔍 Looking for markdown files in: {markdown_dir}")
 
                     if os.path.exists(markdown_dir):
                         # Find all markdown files
@@ -282,6 +283,7 @@ def main():
                                 if file.endswith(".md"):
                                     markdown_files.append(os.path.join(root, file))
 
+                        st.info(f"📄 Found {len(markdown_files)} markdown files in {markdown_dir}")
                         progress_bar.progress(100)
                         status_text.text("✅ Conversion completed successfully!")
 
@@ -343,7 +345,22 @@ def main():
                             st.warning("⚠️ Conversion completed but no markdown files were generated.")
 
                     else:
-                        st.warning("⚠️ Conversion completed but no markdown directory was created.")
+                        st.warning(f"⚠️ Conversion completed but no markdown directory was created at: {markdown_dir}")
+                        # Let's also check if there are any .md files in the workspace root or other locations
+                        st.info("🔍 Searching for markdown files in workspace...")
+                        all_md_files = []
+                        for root, dirs, files in os.walk(workspace_dir):
+                            for file in files:
+                                if file.endswith(".md"):
+                                    all_md_files.append(os.path.join(root, file))
+
+                        if all_md_files:
+                            st.warning(f"❗ Found {len(all_md_files)} markdown files in unexpected locations:")
+                            for md_file in all_md_files:
+                                rel_path = os.path.relpath(md_file, workspace_dir)
+                                st.write(f"• {rel_path}")
+                        else:
+                            st.error("❌ No markdown files found anywhere in the workspace")
 
                 else:
                     progress_bar.progress(100)

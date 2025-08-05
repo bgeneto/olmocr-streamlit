@@ -634,7 +634,7 @@ async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
 
             # If --markdown flag is set, also write the natural text to markdown files
             if args.markdown:
-                logger.info(f"Writing {len(dolma_docs)} markdown files for {work_item.hash}")
+                logger.info(f"✍️  Writing {len(dolma_docs)} markdown files for {work_item.hash}")
                 for doc in dolma_docs:
                     source_file = doc["metadata"]["Source-File"]
                     natural_text = doc["text"]
@@ -645,8 +645,8 @@ async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
                         parsed = urlparse(source_file)
                         relative_path = parsed.path.lstrip("/")
                     else:
-                        # For local files, use the full path
-                        relative_path = source_file
+                        # For local files, use just the filename to place in markdown directory
+                        relative_path = os.path.basename(source_file)
 
                     # Change the extension to .md
                     md_filename = os.path.splitext(os.path.basename(relative_path))[0] + ".md"
@@ -675,6 +675,7 @@ async def worker(args, work_queue: WorkQueue, semaphore, worker_id):
                     else:
                         # For local paths, create the directory structure and write the file
                         os.makedirs(markdown_dir, exist_ok=True)
+                        logger.info(f"📁 Writing markdown file to: {markdown_path}")
                         with open(markdown_path, "w") as md_f:
                             md_f.write(natural_text)
 
