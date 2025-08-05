@@ -158,6 +158,16 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     return cmd, pdf_paths
 
 
+def latex_replace(md):
+    import re
+
+    # Replace \[ ... \] with $$ ... $$
+    md = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", md, flags=re.DOTALL)
+    # Replace \( ... \) with $ ... $
+    md = re.sub(r"\\\((.*?)\\\)", r"$\1$", md, flags=re.DOTALL)
+    return md
+
+
 def main():
     st.title("📄 olmOCR: PDF to Markdown Converter")
     st.markdown("Convert PDF documents to Markdown using visual language models")
@@ -374,16 +384,6 @@ def main():
                                 with open(md_file, "r", encoding="utf-8") as f:
                                     markdown_content = f.read()
 
-                                # Replace LaTeX delimiters for Streamlit compatibility
-                                def latex_replace(md):
-                                    import re
-
-                                    # Replace \[ ... \] with $$ ... $$
-                                    md = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", md, flags=re.DOTALL)
-                                    # Replace \( ... \) with $ ... $
-                                    md = re.sub(r"\\\((.*?)\\\)", r"$\1$", md, flags=re.DOTALL)
-                                    return md
-
                                 markdown_content = latex_replace(markdown_content)
 
                                 # Download button above preview
@@ -418,6 +418,11 @@ def main():
 
                                 # Show file list
                                 with st.expander("\U0001f4cb Converted Files", expanded=True):
+                                    st.markdown(f"**{len(markdown_files)} Markdown files found.**")
+                                    if len(markdown_files) < len(uploaded_files):
+                                        st.warning(
+                                            f"⚠️ Only {len(markdown_files)} Markdown files generated for {len(uploaded_files)} uploaded PDFs. Some conversions may have failed. Check the log above."
+                                        )
                                     for md_file in markdown_files:
                                         filename = os.path.basename(md_file)
                                         file_size = os.path.getsize(md_file)
@@ -434,14 +439,6 @@ def main():
                                     for i, md_file in enumerate(preview_files):
                                         with open(md_file, "r", encoding="utf-8") as f:
                                             markdown_content = f.read()
-
-                                        # Replace LaTeX delimiters for Streamlit compatibility
-                                        def latex_replace(md):
-                                            import re
-
-                                            md = re.sub(r"\\\[(.*?)\\\]", r"$$\\1$$", md, flags=re.DOTALL)
-                                            md = re.sub(r"\\\((.*?)\\\)", r"$\\1$", md, flags=re.DOTALL)
-                                            return md
 
                                         markdown_content = latex_replace(markdown_content)
                                         preview_content = markdown_content[:preview_char_limit]
