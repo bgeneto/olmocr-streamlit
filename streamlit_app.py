@@ -94,6 +94,29 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     # Save uploaded files to workspace/pdf directory
     workspace_root, pdf_dir, outputs_dir = get_workspace_dirs()
 
+    # Clear previous results if force reprocessing is enabled
+    if kwargs.get("force_reprocess", False):
+        results_dir = os.path.join(workspace_dir, "results")
+        markdown_dir = os.path.join(workspace_dir, "markdown")
+
+        # Clear results directory
+        if os.path.exists(results_dir):
+            existing_files = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
+            if existing_files:
+                st.info(f"🧹 Clearing {len(existing_files)} previous result files from: {results_dir}")
+            shutil.rmtree(results_dir)
+
+        # Clear markdown directory too for a fresh start
+        if os.path.exists(markdown_dir):
+            existing_md_files = []
+            for root, dirs, files in os.walk(markdown_dir):
+                for file in files:
+                    if file.endswith(".md"):
+                        existing_md_files.append(file)
+            if existing_md_files:
+                st.info(f"🧹 Clearing {len(existing_md_files)} previous markdown files from: {markdown_dir}")
+            shutil.rmtree(markdown_dir)
+
     pdf_paths = []
     for pdf_file in pdf_files:
         # Save using safe filename under /workspace/pdfs
@@ -156,6 +179,28 @@ def main():
     st.sidebar.subheader("📁 Workspace")
     st.sidebar.info(f"Working directory: {workspace_dir}")
 
+    # Check for existing results
+    results_dir = os.path.join(workspace_dir, "results")
+    if os.path.exists(results_dir):
+        existing_results = [f for f in os.listdir(results_dir) if f.startswith("output_") and f.endswith(".jsonl")]
+        if existing_results:
+            st.sidebar.warning(f"⚠️ Found {len(existing_results)} previous result file(s)")
+            st.sidebar.caption("Enable 'Force Reprocessing' to clear these and start fresh")
+
+            # Add manual clear button
+            if st.sidebar.button("🗑️ Clear Workspace Now"):
+                try:
+                    shutil.rmtree(results_dir)
+                    markdown_dir = os.path.join(workspace_dir, "markdown")
+                    if os.path.exists(markdown_dir):
+                        shutil.rmtree(markdown_dir)
+                    st.sidebar.success("✅ Workspace cleared!")
+                    st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"❌ Error clearing workspace: {e}")
+        else:
+            st.sidebar.success("✨ No previous results found")
+
     # Server status in sidebar
     st.sidebar.subheader("Server Status")
     server_status = check_vllm_server_status(vllm_base_url)
@@ -183,8 +228,20 @@ def main():
     guided_decoding = st.sidebar.checkbox("Enable Guided Decoding", value=False)
     workers = st.sidebar.slider("Number of Workers", 1, 20, 10)
 
+    # Add option to force reprocessing
+    force_reprocess = st.sidebar.checkbox(
+        "🔄 Force Reprocessing", value=True, help="Clear previous results and reprocess files even if they were already converted"
+    )
+
+    if not force_reprocess:
+        st.sidebar.warning("⚠️ If you get 'No work to do, exiting', enable Force Reprocessing to clear cached results")
+
     # Main interface
     st.header("📁 Upload PDF Files")
+
+    st.info(
+        "💡 **Tip:** olmOCR caches conversion results. If you see 'No work to do, exiting', enable '🔄 Force Reprocessing' in the sidebar to clear cached results and reprocess files."
+    )
 
     # File uploader
     uploaded_files = st.file_uploader("Choose PDF files", type=["pdf"], accept_multiple_files=True, help="Upload one or more PDF files to convert to Markdown")
@@ -221,6 +278,7 @@ def main():
                     apply_filter=apply_filter,
                     guided_decoding=guided_decoding,
                     workers=workers,
+                    force_reprocess=force_reprocess,
                 )
 
                 status_text.text("🚀 Running olmOCR conversion...")
@@ -253,6 +311,10 @@ def main():
                                 error_count += 1
                             if "CONNECTION ERROR" in line or "🔌" in line:
                                 connection_errors += 1
+                            if "No work to do, exiting" in line:
+                                st.warning(
+                                    "⚠️ **No work to do detected!** This usually means the files have already been processed. Enable '🔄 Force Reprocessing' in the sidebar to reprocess them."
+                                )
                             # Show all log lines in a scrollable textarea
                             formatted_log = []
                             for log_line in log_lines:
