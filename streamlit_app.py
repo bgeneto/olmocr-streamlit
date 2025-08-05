@@ -228,8 +228,7 @@ def main():
 
                 # Execute conversion
                 with st.expander("📋 Conversion Log", expanded=True):
-                    log_container = st.empty()
-
+                    log_text = st.empty()
                     # Set up logging to capture detailed output
                     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
 
@@ -242,41 +241,31 @@ def main():
                         st.error("❌ Failed to start conversion process")
                         return
 
-                    with st.expander("📋 Conversion Log", expanded=True):
-                        log_text = st.empty()
-                        while True:
-                            output = process.stdout.readline()
-                            if output == "" and process.poll() is not None:
-                                break
-                            if output:
-                                line = output.strip()
-                                log_lines.append(line)
-                                # Count different types of errors for better user feedback
-                                if "ERROR" in line or "💥" in line or "❌" in line:
-                                    error_count += 1
-                                if "CONNECTION ERROR" in line or "🔌" in line:
-                                    connection_errors += 1
-                                # Show all log lines in a scrollable textarea
-                                formatted_log = []
-                                for log_line in log_lines:
-                                    if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
-                                        formatted_log.append(f"🔥 {log_line}")
-                                    elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
-                                        formatted_log.append(f"⚠️ {log_line}")
-                                    elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
-                                        formatted_log.append(f"✅ {log_line}")
-                                    else:
-                                        formatted_log.append(log_line)
-                                log_text.text_area("Conversion Log (Verbose)", value="\n".join(formatted_log), height=400, disabled=True)
-
-                    return_code = process.poll()
-
-                    # Show error summary if there were issues
-                    if error_count > 0:
-                        st.error(f"⚠️ Detected {error_count} errors during processing")
-                        if connection_errors > 0:
-                            st.error(f"🔌 {connection_errors} connection errors detected - check if vLLM server is running and accessible")
-                            st.info("💡 Try checking the server status in the sidebar or restart the vLLM server")
+                    while True:
+                        output = process.stdout.readline()
+                        if output == "" and process.poll() is not None:
+                            break
+                        if output:
+                            line = output.strip()
+                            log_lines.append(line)
+                            # Count different types of errors for better user feedback
+                            if "ERROR" in line or "💥" in line or "❌" in line:
+                                error_count += 1
+                            if "CONNECTION ERROR" in line or "🔌" in line:
+                                connection_errors += 1
+                            # Show all log lines in a scrollable textarea
+                            formatted_log = []
+                            for log_line in log_lines:
+                                if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
+                                    formatted_log.append(f"🔥 {log_line}")
+                                elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
+                                    formatted_log.append(f"⚠️ {log_line}")
+                                elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
+                                    formatted_log.append(f"✅ {log_line}")
+                                else:
+                                    formatted_log.append(log_line)
+                            log_text.text_area("Conversion Log (Verbose)", value="\n".join(formatted_log), height=400, disabled=True)
+                return_code = process.poll()
 
                 progress_bar.progress(80)
                 status_text.text("📝 Processing results...")
