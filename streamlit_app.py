@@ -15,6 +15,7 @@ from datetime import datetime
 import shutil
 import requests
 import time
+from lingua import Language
 
 st.set_page_config(page_title="olmOCR PDF to Markdown Converter", layout="wide", page_icon="📄")
 
@@ -172,6 +173,27 @@ def main():
     st.title("📄 olmOCR: PDF to Markdown Converter")
     st.markdown("Convert PDF documents to Markdown using visual language models")
 
+    # Language selection sidebar
+    st.sidebar.subheader("Supported Languages")
+    language_options = {
+        "English": Language.ENGLISH,
+        "Portuguese": Language.PORTUGUESE,
+        "Spanish": Language.SPANISH,
+        "French": Language.FRENCH,
+        "German": Language.GERMAN,
+        "Italian": Language.ITALIAN,
+        "Dutch": Language.DUTCH,
+        "Russian": Language.RUSSIAN,
+        "Chinese": Language.CHINESE,
+        "Japanese": Language.JAPANESE,
+        # Add more as needed
+    }
+    default_langs = ["English", "Portuguese", "Spanish"]
+    selected_langs = st.sidebar.multiselect(
+        "Select allowed document languages:", options=list(language_options.keys()), default=default_langs, help="PDFs in other languages will be filtered out."
+    )
+    languages_to_keep = [language_options[l] for l in selected_langs]
+
     # Get vLLM server URL from environment variable
     vllm_base_url = os.environ.get("VLLM_BASE_URL", "http://vllm-server:30024")
     vllm_api_key = os.environ.get("VLLM_API_KEY")
@@ -302,6 +324,7 @@ def main():
                     guided_decoding=guided_decoding,
                     workers=workers,
                     force_reprocess=force_reprocess,
+                    languages_to_keep=languages_to_keep,
                 )
 
                 status_text.text("🚀 Running olmOCR conversion...")
