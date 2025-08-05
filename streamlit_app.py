@@ -103,24 +103,22 @@ def main():
     st.title("📄 olmOCR: PDF to Markdown Converter")
     st.markdown("Convert PDF documents to Markdown using visual language models")
 
+    # Get vLLM server URL from environment variable
+    vllm_base_url = os.environ.get("VLLM_BASE_URL", "http://vllm-server:30024")
+
     # Sidebar configuration
     st.sidebar.header("⚙️ Configuration")
 
-    # vLLM Server Configuration
-    st.sidebar.subheader("vLLM Server")
-    vllm_base_url = st.sidebar.text_input(
-        "vLLM Server URL", value="http://vllm-server:30024", help="URL of the running vLLM server (e.g., http://localhost:30024)"
-    )
+    # Server status in sidebar
+    st.sidebar.subheader("Server Status")
+    server_status = check_vllm_server_status(vllm_base_url)
+    if server_status:
+        st.sidebar.success("✅ vLLM Server: Online")
+    else:
+        st.sidebar.error("❌ vLLM Server: Offline")
 
-    # Check server status
-    if vllm_base_url:
-        with st.sidebar:
-            if st.button("🔍 Check Server Status"):
-                with st.spinner("Checking server..."):
-                    if check_vllm_server_status(vllm_base_url):
-                        st.success("✅ Server is accessible")
-                    else:
-                        st.error("❌ Server is not accessible")
+    if st.sidebar.button("🔍 Refresh Server Status"):
+        st.rerun()
 
     st.sidebar.markdown("---")
 
@@ -152,26 +150,19 @@ def main():
         st.header("📊 Status")
 
         # Server status indicator
-        if vllm_base_url:
-            server_status = check_vllm_server_status(vllm_base_url)
-            if server_status:
-                st.markdown('<div class="success-box">🟢 vLLM Server: Online</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="error-box">🔴 vLLM Server: Offline</div>', unsafe_allow_html=True)
+        server_status = check_vllm_server_status(vllm_base_url)
+        if server_status:
+            st.markdown('<div class="success-box">🟢 vLLM Server: Online</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="info-box">⚠️ No vLLM server configured</div>', unsafe_allow_html=True)
+            st.markdown('<div class="error-box">🔴 vLLM Server: Offline</div>', unsafe_allow_html=True)
 
     # Conversion section
     if uploaded_files:
         st.header("🚀 Convert to Markdown")
 
         if st.button("Start Conversion", type="primary", use_container_width=True):
-            if not vllm_base_url:
-                st.error("❌ Please configure a vLLM server URL in the sidebar")
-                return
-
             if not check_vllm_server_status(vllm_base_url):
-                st.error("❌ vLLM server is not accessible. Please check the server URL and ensure it's running.")
+                st.error("❌ vLLM server is not accessible. Please check the server status and ensure it's running.")
                 return
 
             # Create temporary workspace

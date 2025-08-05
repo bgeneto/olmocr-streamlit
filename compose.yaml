@@ -45,6 +45,7 @@ services:
       - .:/app
     environment:
       - PYTHONPATH=/app
+      - VLLM_BASE_URL=http://vllm-server:8000
     depends_on:
       vllm-server:
         condition: service_healthy
