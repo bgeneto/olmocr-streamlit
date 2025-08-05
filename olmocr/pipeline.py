@@ -545,10 +545,10 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
 
     for index, page_result in enumerate(page_results):
         if page_result.response.natural_text is not None:
-            # Add page number header if requested
+            # Add page number if requested
             content = ""
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content += f"(Page {page_result.page_num})\n\n"
+                content += f"\n(Page {page_result.page_num})\n"
 
             content += page_result.response.natural_text
             if index < len(page_results) - 1:
@@ -556,7 +556,7 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
         else:
             # Even for empty content, add page header if requested
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content = f"(Page {page_result.page_num})\n\n"
+                content = f"\n(Page {page_result.page_num})\n"
             else:
                 content = ""
 
