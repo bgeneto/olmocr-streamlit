@@ -124,14 +124,14 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
 
     # Add additional parameters
     if kwargs.get("target_dim"):
-        cmd.extend(["--target_longest_image_dim", str(kwargs["target_dim")]])
+        cmd.extend(["--target_longest_image_dim", str(kwargs["target_dim"])])
     if kwargs.get("apply_filter"):
         cmd.append("--apply_filter")
     if kwargs.get("guided_decoding"):
         cmd.append("--guided_decoding")
     if kwargs.get("workers"):
-        cmd.extend(["--workers", str(kwargs["workers")]])
-
+        cmd.extend(["--workers", str(kwargs["workers"])])
+    # ...existing code...
     return cmd, pdf_paths
 
 
