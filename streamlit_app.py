@@ -128,21 +128,23 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
 
     pdf_paths = []
 
-    # Create a unique temporary directory for this conversion session to avoid conflicts
+    # Instead of using session directories, use unique filenames to avoid conflicts
     import uuid
+    import time
 
+    session_timestamp = int(time.time())
     session_id = str(uuid.uuid4())[:8]
-    session_pdf_dir = os.path.join(pdf_dir, f"session_{session_id}")
-    os.makedirs(session_pdf_dir, exist_ok=True)
 
     for pdf_file in pdf_files:
-        # Save using safe filename under session-specific directory
-        pdf_path = os.path.join(session_pdf_dir, pdf_file.name)
+        # Create a unique filename that combines timestamp, session ID, and original name
+        unique_filename = f"{session_timestamp}_{session_id}_{pdf_file.name}"
+        pdf_path = os.path.join(pdf_dir, unique_filename)
+
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
         pdf_paths.append(pdf_path)
 
-    st.info(f"📁 Created session directory: {session_pdf_dir}")
+    st.info(f"📁 Saving files to: {pdf_dir}")
     st.info(f"📄 Processing {len(pdf_paths)} PDF file(s): {[os.path.basename(p) for p in pdf_paths]}")
 
     # Build olmOCR command - workspace_dir used for run-specific temp artifacts
@@ -183,14 +185,18 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     else:
         st.info("🌐 No language filtering applied - all languages will be processed")
 
-    # Add cleanup function for session directory
+    # Add cleanup function for the uploaded files
     def cleanup_session_files():
         try:
-            if os.path.exists(session_pdf_dir):
-                shutil.rmtree(session_pdf_dir)
-                st.info(f"🧹 Cleaned up session directory: {session_pdf_dir}")
+            files_cleaned = 0
+            for pdf_path in pdf_paths:
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                    files_cleaned += 1
+            if files_cleaned > 0:
+                st.info(f"🧹 Cleaned up {files_cleaned} session file(s)")
         except Exception as e:
-            st.warning(f"⚠️ Could not clean up session directory: {e}")
+            st.warning(f"⚠️ Could not clean up session files: {e}")
 
     return cmd, pdf_paths, cleanup_session_files
 
@@ -259,9 +265,8 @@ def main():
     # Check for accumulated PDF files
     if os.path.exists(pdf_dir):
         existing_pdfs = [f for f in os.listdir(pdf_dir) if f.endswith(".pdf")]
-        session_dirs = [d for d in os.listdir(pdf_dir) if d.startswith("session_") and os.path.isdir(os.path.join(pdf_dir, d))]
-        if existing_pdfs or session_dirs:
-            st.sidebar.warning(f"⚠️ Found {len(existing_pdfs)} PDF files + {len(session_dirs)} session directories")
+        if existing_pdfs:
+            st.sidebar.warning(f"⚠️ Found {len(existing_pdfs)} PDF files from previous sessions")
             st.sidebar.caption("Old PDF files may interfere with processing")
 
             # Add manual clear button
