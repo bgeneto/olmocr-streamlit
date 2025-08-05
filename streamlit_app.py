@@ -226,7 +226,8 @@ def main():
     target_dim = st.sidebar.slider("Target Image Dimension", 800, 2000, 1288)
     apply_filter = st.sidebar.checkbox("Apply PDF Filter", value=True)
     guided_decoding = st.sidebar.checkbox("Enable Guided Decoding", value=False)
-    workers = st.sidebar.slider("Number of Workers", 1, 20, 10)
+    default_workers = int(os.environ.get("DEFAULT_WORKERS", 4))
+    workers = st.sidebar.slider("Number of Workers", 1, 20, default_workers)
 
     # Add option to force reprocessing
     force_reprocess = st.sidebar.checkbox(
@@ -361,17 +362,31 @@ def main():
                                 with open(md_file, "r", encoding="utf-8") as f:
                                     markdown_content = f.read()
 
-                                col1, col2 = st.columns([3, 1])
+                                st.subheader("📄 Preview")
+                                with st.expander("View Markdown Content", expanded=True):
+                                    st.markdown(
+                                        """
+                                        <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+                                        <script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js\"></script>
+                                        <script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js\"></script>
+                                        <script>
+                                        document.addEventListener(\"DOMContentLoaded\", function() {
+                                            renderMathInElement(document.body, {
+                                                delimiters: [
+                                                    {left: '$$', right: '$$', display: true},
+                                                    {left: '$', right: '$', display: false}
+                                                ]
+                                            });
+                                        });
+                                        </script>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
+                                    st.markdown(markdown_content, unsafe_allow_html=True)
 
-                                with col1:
-                                    st.subheader("📄 Preview")
-                                    with st.expander("View Markdown Content", expanded=True):
-                                        st.text_area("", value=markdown_content, height=300, disabled=True)
-
-                                with col2:
-                                    st.subheader("⬇️ Download")
-                                    filename = os.path.basename(md_file)
-                                    st.download_button(label=f"Download {filename}", data=markdown_content, file_name=filename, mime="text/markdown")
+                                # Download button below preview
+                                filename = os.path.basename(md_file)
+                                st.download_button(label=f"⬇️ Download {filename}", data=markdown_content, file_name=filename, mime="text/markdown")
 
                             else:
                                 # Multiple files - create zip
