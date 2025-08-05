@@ -1,20 +1,20 @@
 services:
   olmocr-streamlit-app:
-  build:
-    context: .
-    dockerfile: Dockerfile.streamlit
-  container_name: olmocr-streamlit-app
-  ports:
-    - "8006:8501"
-  volumes:
-    - ./workspace:/workspace
-    - .:/app
-  environment:
-    - PYTHONPATH=/app
-    - VLLM_BASE_URL=http://vllm1:8000
-  command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
-  networks:
-    - vllm
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: olmocr-streamlit-app
+    ports:
+      - "8006:8501"
+    volumes:
+      - ./workspace:/workspace
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+      - VLLM_BASE_URL=http://vllm1:8000
+    command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    networks:
+      - vllm
 
 networks:
   vllm:
