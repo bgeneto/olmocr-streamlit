@@ -229,6 +229,8 @@ def main():
         1288,
         help="Set the maximum dimension (in pixels) for images extracted from PDFs. Larger values may improve OCR accuracy but increase processing time and output size. See olmOCR docs for guidance.",
     )
+    default_workers = int(os.environ.get("DEFAULT_WORKERS", 4))
+    workers = st.sidebar.slider("Number of Workers", 1, 20, default_workers)
     apply_filter = st.sidebar.checkbox(
         "Apply PDF Filter",
         value=True,
@@ -239,9 +241,6 @@ def main():
         value=False,
         help="Use guided decoding to improve Markdown output quality by leveraging document structure hints. See olmOCR docs for more info.",
     )
-    default_workers = int(os.environ.get("DEFAULT_WORKERS", 4))
-    workers = st.sidebar.slider("Number of Workers", 1, 20, default_workers)
-
     # Add option to force reprocessing
     force_reprocess = st.sidebar.checkbox(
         "🔄 Force Reprocessing", value=True, help="Clear previous results and reprocess files even if they were already converted"
@@ -268,7 +267,7 @@ def main():
 
     # Conversion section
     if uploaded_files:
-        st.header("🚀 Convert to Markdown")
+        st.header("🚀 Convert File(s)")
 
         if st.button("Start Conversion", type="primary", use_container_width=True):
             if not check_vllm_server_status(vllm_base_url):
@@ -390,7 +389,7 @@ def main():
                                 # Download button above preview
                                 st.download_button(label="⬇️ Download Markdown", data=markdown_content, file_name="output.md", mime="text/markdown")
 
-                                st.subheader("📄 Preview")
+                                st.subheader("📄 Markdown Preview")
                                 with st.expander("View Markdown Content", expanded=True):
                                     st.markdown(markdown_content, unsafe_allow_html=False)
 
