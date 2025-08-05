@@ -15,11 +15,32 @@ COPY pyproject.toml ./
 COPY README.md ./
 COPY setup.py ./
 
-# Create a minimal olmocr package structure for dependency installation
-RUN mkdir -p olmocr && touch olmocr/__init__.py
+# Install common dependencies that are likely to be in pyproject.toml
+# This layer will be cached unless pyproject.toml changes
+RUN pip install toml setuptools wheel build
 
-# Install dependencies first (this layer will be cached unless pyproject.toml changes)
-RUN pip install .
+# Install known dependencies from pyproject.toml (hardcoded for better caching)
+RUN pip install \
+    cached-path \
+    smart_open \
+    "pypdf>=5.2.0" \
+    pypdfium2 \
+    cryptography \
+    lingua-language-detector \
+    Pillow \
+    ftfy \
+    bleach \
+    markdown2 \
+    filelock \
+    orjson \
+    requests \
+    zstandard \
+    boto3 \
+    httpx \
+    "torch>=2.7.0" \
+    "transformers==4.52.4" \
+    img2pdf \
+    beaker-py
 
 # Install additional dependencies for Streamlit app
 RUN pip install streamlit requests
@@ -27,8 +48,8 @@ RUN pip install streamlit requests
 # Copy application code AFTER installing dependencies
 COPY . .
 
-# Reinstall to pick up actual code (fast since deps are already cached)
-RUN pip install -e . --force-reinstall --no-deps
+# Install the package (fast since deps are already cached)
+RUN pip install -e .
 
 # Create workspace directory
 RUN mkdir -p /workspace
