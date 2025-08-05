@@ -257,6 +257,23 @@ def main():
     if uploaded_files:
         st.header("🚀 Convert to Markdown")
 
+        # Custom style for the button
+        st.markdown(
+            """
+            <style>
+            div.stButton > button:first-child {
+                background-color: #28a745 !important;
+                color: white !important;
+                border: none !important;
+                border-radius: 5px !important;
+                padding: 0.5em 2em !important;
+                font-size: 1.1em !important;
+                font-weight: bold !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         if st.button("Start Conversion", type="primary", use_container_width=True):
             if not check_vllm_server_status(vllm_base_url):
                 st.error("❌ vLLM server is not accessible. Please check the server status and ensure it's running.")
@@ -357,36 +374,17 @@ def main():
                             st.header("📥 Download Results")
 
                             if len(markdown_files) == 1:
-                                # Single file - show preview and download
+                                # Single file - show download button first, then preview
                                 md_file = markdown_files[0]
                                 with open(md_file, "r", encoding="utf-8") as f:
                                     markdown_content = f.read()
 
+                                # Download button above preview
+                                st.download_button(label="⬇️ Download Markdown", data=markdown_content, file_name="output.md", mime="text/markdown")
+
                                 st.subheader("📄 Preview")
                                 with st.expander("View Markdown Content", expanded=True):
-                                    st.markdown(
-                                        """
-                                        <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-                                        <script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js\"></script>
-                                        <script src=\"https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js\"></script>
-                                        <script>
-                                        document.addEventListener(\"DOMContentLoaded\", function() {
-                                            renderMathInElement(document.body, {
-                                                delimiters: [
-                                                    {left: '$$', right: '$$', display: true},
-                                                    {left: '$', right: '$', display: false}
-                                                ]
-                                            });
-                                        });
-                                        </script>
-                                        """,
-                                        unsafe_allow_html=True,
-                                    )
-                                    st.markdown(markdown_content, unsafe_allow_html=True)
-
-                                # Download button below preview
-                                filename = os.path.basename(md_file)
-                                st.download_button(label=f"⬇️ Download {filename}", data=markdown_content, file_name=filename, mime="text/markdown")
+                                    st.markdown(r"""{}""".format(markdown_content), unsafe_allow_html=False)
 
                             else:
                                 # Multiple files - create zip
