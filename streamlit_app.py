@@ -59,6 +59,20 @@ st.markdown(
 )
 
 
+# New helper to get workspace directories
+def get_workspace_dirs():
+    """Return workspace root and subdirs for PDFs and outputs.
+    WORKSPACE_DIR can be overridden via env var, defaults to '/workspace'.
+    """
+    workspace_root = os.environ.get("WORKSPACE_DIR", "/workspace")
+    pdf_dir = os.path.join(workspace_root, "pdfs")
+    outputs_dir = os.path.join(workspace_root, "outputs")
+    # Ensure directories exist
+    os.makedirs(pdf_dir, exist_ok=True)
+    os.makedirs(outputs_dir, exist_ok=True)
+    return workspace_root, pdf_dir, outputs_dir
+
+
 def check_vllm_server_status(base_url: str) -> bool:
     """Check if vLLM server is accessible"""
     try:
@@ -77,16 +91,27 @@ def check_vllm_server_status(base_url: str) -> bool:
 def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **kwargs):
     """Run olmOCR conversion on uploaded PDF files"""
 
-    # Save uploaded files to workspace
+    # Save uploaded files to workspace/pdf directory
+    workspace_root, pdf_dir, outputs_dir = get_workspace_dirs()
+
     pdf_paths = []
     for pdf_file in pdf_files:
-        pdf_path = os.path.join(workspace_dir, pdf_file.name)
+        # Save using safe filename under /workspace/pdfs
+        pdf_path = os.path.join(pdf_dir, pdf_file.name)
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
         pdf_paths.append(pdf_path)
 
-    # Build olmOCR command
-    cmd = ["python", "-m", "olmocr.pipeline", workspace_dir, "--markdown", "--pdfs"] + pdf_paths
+    # Build olmOCR command - workspace_dir used for run-specific temp artifacts
+    cmd = [
+        "python",
+        "-m",
+        "olmocr.pipeline",
+        workspace_dir,
+        "--markdown",
+        "--pdfs",
+        *pdf_paths,
+    ]
 
     # Add vLLM server URL if provided
     if vllm_base_url:
@@ -99,13 +124,13 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
 
     # Add additional parameters
     if kwargs.get("target_dim"):
-        cmd.extend(["--target_longest_image_dim", str(kwargs["target_dim"])])
+        cmd.extend(["--target_longest_image_dim", str(kwargs["target_dim")]])
     if kwargs.get("apply_filter"):
         cmd.append("--apply_filter")
     if kwargs.get("guided_decoding"):
         cmd.append("--guided_decoding")
     if kwargs.get("workers"):
-        cmd.extend(["--workers", str(kwargs["workers"])])
+        cmd.extend(["--workers", str(kwargs["workers")]])
 
     return cmd, pdf_paths
 
@@ -118,8 +143,18 @@ def main():
     vllm_base_url = os.environ.get("VLLM_BASE_URL", "http://vllm-server:30024")
     vllm_api_key = os.environ.get("VLLM_API_KEY")
 
+    # Get workspace directory from environment variable or default to /workspace
+    workspace_dir = os.environ.get("WORKSPACE_DIR", "/workspace")
+
+    # Ensure workspace directory exists
+    os.makedirs(workspace_dir, exist_ok=True)
+
     # Sidebar configuration
     st.sidebar.header("⚙️ Configuration")
+
+    # Display workspace directory in sidebar
+    st.sidebar.subheader("📁 Workspace")
+    st.sidebar.info(f"Working directory: {workspace_dir}")
 
     # Server status in sidebar
     st.sidebar.subheader("Server Status")
@@ -169,164 +204,167 @@ def main():
                 st.error("❌ vLLM server is not accessible. Please check the server status and ensure it's running.")
                 return
 
-            # Create temporary workspace
-            with tempfile.TemporaryDirectory() as temp_workspace:
-                try:
-                    # Progress tracking
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+            try:
+                # Progress tracking
+                progress_bar = st.progress(0)
+                status_text = st.empty()
 
-                    status_text.text("🔄 Preparing files...")
-                    progress_bar.progress(10)
+                status_text.text("🔄 Preparing files...")
+                progress_bar.progress(10)
 
-                    # Run conversion
-                    cmd, pdf_paths = run_olmocr_conversion(
-                        uploaded_files,
-                        temp_workspace,
-                        vllm_base_url,
-                        target_dim=target_dim,
-                        apply_filter=apply_filter,
-                        guided_decoding=guided_decoding,
-                        workers=workers,
-                    )
+                # Run conversion
+                cmd, pdf_paths = run_olmocr_conversion(
+                    uploaded_files,
+                    workspace_dir,
+                    vllm_base_url,
+                    target_dim=target_dim,
+                    apply_filter=apply_filter,
+                    guided_decoding=guided_decoding,
+                    workers=workers,
+                )
 
-                    status_text.text("🚀 Running olmOCR conversion...")
-                    progress_bar.progress(30)
+                status_text.text("🚀 Running olmOCR conversion...")
+                progress_bar.progress(30)
 
-                    # Execute conversion
-                    with st.expander("📋 Conversion Log", expanded=False):
-                        log_container = st.empty()
+                # Execute conversion
+                with st.expander("📋 Conversion Log", expanded=False):
+                    log_container = st.empty()
 
-                        # Set up logging to capture detailed output
-                        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
+                    # Set up logging to capture detailed output
+                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, universal_newlines=True)
 
-                        log_lines = []
-                        error_count = 0
-                        connection_errors = 0
+                    log_lines = []
+                    error_count = 0
+                    connection_errors = 0
 
-                        while True:
-                            output = process.stdout.readline()
-                            if output == "" and process.poll() is not None:
-                                break
-                            if output:
-                                line = output.strip()
-                                log_lines.append(line)
+                    # Check if process started successfully
+                    if process.stdout is None:
+                        st.error("❌ Failed to start conversion process")
+                        return
 
-                                # Count different types of errors for better user feedback
-                                if "ERROR" in line or "💥" in line or "❌" in line:
-                                    error_count += 1
-                                if "CONNECTION ERROR" in line or "🔌" in line:
-                                    connection_errors += 1
+                    while True:
+                        output = process.stdout.readline()
+                        if output == "" and process.poll() is not None:
+                            break
+                        if output:
+                            line = output.strip()
+                            log_lines.append(line)
 
-                                # Show last 25 lines of log with some error highlighting
-                                recent_lines = log_lines[-25:]
-                                formatted_lines = []
-                                for log_line in recent_lines:
-                                    if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
-                                        formatted_lines.append(f"🔥 {log_line}")
-                                    elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
-                                        formatted_lines.append(f"⚠️ {log_line}")
-                                    elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
-                                        formatted_lines.append(f"✅ {log_line}")
-                                    else:
-                                        formatted_lines.append(log_line)
+                            # Count different types of errors for better user feedback
+                            if "ERROR" in line or "💥" in line or "❌" in line:
+                                error_count += 1
+                            if "CONNECTION ERROR" in line or "🔌" in line:
+                                connection_errors += 1
 
-                                log_container.text("\n".join(formatted_lines))
-
-                        return_code = process.poll()
-
-                        # Show error summary if there were issues
-                        if error_count > 0:
-                            st.error(f"⚠️ Detected {error_count} errors during processing")
-                            if connection_errors > 0:
-                                st.error(f"🔌 {connection_errors} connection errors detected - check if vLLM server is running and accessible")
-                                st.info("💡 Try checking the server status in the sidebar or restart the vLLM server")
-
-                    progress_bar.progress(80)
-                    status_text.text("📝 Processing results...")
-
-                    if return_code == 0:
-                        # Check for generated markdown files
-                        markdown_dir = os.path.join(temp_workspace, "markdown")
-
-                        if os.path.exists(markdown_dir):
-                            # Find all markdown files
-                            markdown_files = []
-                            for root, dirs, files in os.walk(markdown_dir):
-                                for file in files:
-                                    if file.endswith(".md"):
-                                        markdown_files.append(os.path.join(root, file))
-
-                            progress_bar.progress(100)
-                            status_text.text("✅ Conversion completed successfully!")
-
-                            if markdown_files:
-                                st.success(f"🎉 Successfully converted {len(markdown_files)} PDF file(s) to Markdown!")
-
-                                # Results section
-                                st.header("📥 Download Results")
-
-                                if len(markdown_files) == 1:
-                                    # Single file - show preview and download
-                                    md_file = markdown_files[0]
-                                    with open(md_file, "r", encoding="utf-8") as f:
-                                        markdown_content = f.read()
-
-                                    col1, col2 = st.columns([3, 1])
-
-                                    with col1:
-                                        st.subheader("📄 Preview")
-                                        with st.expander("View Markdown Content", expanded=True):
-                                            st.text_area("", value=markdown_content, height=300, disabled=True)
-
-                                    with col2:
-                                        st.subheader("⬇️ Download")
-                                        filename = os.path.basename(md_file)
-                                        st.download_button(label=f"Download {filename}", data=markdown_content, file_name=filename, mime="text/markdown")
-
+                            # Show last 25 lines of log with some error highlighting
+                            recent_lines = log_lines[-25:]
+                            formatted_lines = []
+                            for log_line in recent_lines:
+                                if any(symbol in log_line for symbol in ["❌", "💥", "💀", "ERROR"]):
+                                    formatted_lines.append(f"🔥 {log_line}")
+                                elif any(symbol in log_line for symbol in ["⚠️", "WARNING"]):
+                                    formatted_lines.append(f"⚠️ {log_line}")
+                                elif any(symbol in log_line for symbol in ["✅", "SUCCESS"]):
+                                    formatted_lines.append(f"✅ {log_line}")
                                 else:
-                                    # Multiple files - create zip
-                                    st.subheader("📦 Multiple Files")
+                                    formatted_lines.append(log_line)
 
-                                    # Create zip file
-                                    zip_path = os.path.join(temp_workspace, "markdown_files.zip")
-                                    with zipfile.ZipFile(zip_path, "w") as zipf:
-                                        for md_file in markdown_files:
-                                            # Get relative path for zip
-                                            rel_path = os.path.relpath(md_file, markdown_dir)
-                                            zipf.write(md_file, rel_path)
+                            log_container.text("\n".join(formatted_lines))
 
-                                    # Offer zip download
-                                    with open(zip_path, "rb") as f:
-                                        zip_data = f.read()
+                    return_code = process.poll()
 
-                                    st.download_button(
-                                        label=f"📁 Download All ({len(markdown_files)} files as ZIP)",
-                                        data=zip_data,
-                                        file_name="olmocr_markdown_files.zip",
-                                        mime="application/zip",
-                                    )
+                    # Show error summary if there were issues
+                    if error_count > 0:
+                        st.error(f"⚠️ Detected {error_count} errors during processing")
+                        if connection_errors > 0:
+                            st.error(f"🔌 {connection_errors} connection errors detected - check if vLLM server is running and accessible")
+                            st.info("💡 Try checking the server status in the sidebar or restart the vLLM server")
 
-                                    # Show file list
-                                    with st.expander("📋 Converted Files", expanded=True):
-                                        for md_file in markdown_files:
-                                            filename = os.path.basename(md_file)
-                                            file_size = os.path.getsize(md_file)
-                                            st.write(f"• {filename} ({file_size/1024:.1f} KB)")
+                progress_bar.progress(80)
+                status_text.text("📝 Processing results...")
+
+                if return_code == 0:
+                    # Check for generated markdown files
+                    markdown_dir = os.path.join(workspace_dir, "markdown")
+
+                    if os.path.exists(markdown_dir):
+                        # Find all markdown files
+                        markdown_files = []
+                        for root, dirs, files in os.walk(markdown_dir):
+                            for file in files:
+                                if file.endswith(".md"):
+                                    markdown_files.append(os.path.join(root, file))
+
+                        progress_bar.progress(100)
+                        status_text.text("✅ Conversion completed successfully!")
+
+                        if markdown_files:
+                            st.success(f"🎉 Successfully converted {len(markdown_files)} PDF file(s) to Markdown!")
+
+                            # Results section
+                            st.header("📥 Download Results")
+
+                            if len(markdown_files) == 1:
+                                # Single file - show preview and download
+                                md_file = markdown_files[0]
+                                with open(md_file, "r", encoding="utf-8") as f:
+                                    markdown_content = f.read()
+
+                                col1, col2 = st.columns([3, 1])
+
+                                with col1:
+                                    st.subheader("📄 Preview")
+                                    with st.expander("View Markdown Content", expanded=True):
+                                        st.text_area("", value=markdown_content, height=300, disabled=True)
+
+                                with col2:
+                                    st.subheader("⬇️ Download")
+                                    filename = os.path.basename(md_file)
+                                    st.download_button(label=f"Download {filename}", data=markdown_content, file_name=filename, mime="text/markdown")
 
                             else:
-                                st.warning("⚠️ Conversion completed but no markdown files were generated.")
+                                # Multiple files - create zip
+                                st.subheader("📦 Multiple Files")
+
+                                # Create zip file
+                                zip_path = os.path.join(workspace_dir, "markdown_files.zip")
+                                with zipfile.ZipFile(zip_path, "w") as zipf:
+                                    for md_file in markdown_files:
+                                        # Get relative path for zip
+                                        rel_path = os.path.relpath(md_file, markdown_dir)
+                                        zipf.write(md_file, rel_path)
+
+                                # Offer zip download
+                                with open(zip_path, "rb") as f:
+                                    zip_data = f.read()
+
+                                st.download_button(
+                                    label=f"📁 Download All ({len(markdown_files)} files as ZIP)",
+                                    data=zip_data,
+                                    file_name="olmocr_markdown_files.zip",
+                                    mime="application/zip",
+                                )
+
+                                # Show file list
+                                with st.expander("📋 Converted Files", expanded=True):
+                                    for md_file in markdown_files:
+                                        filename = os.path.basename(md_file)
+                                        file_size = os.path.getsize(md_file)
+                                        st.write(f"• {filename} ({file_size/1024:.1f} KB)")
 
                         else:
-                            st.warning("⚠️ Conversion completed but no markdown directory was created.")
+                            st.warning("⚠️ Conversion completed but no markdown files were generated.")
 
                     else:
-                        progress_bar.progress(100)
-                        status_text.text("❌ Conversion failed")
-                        st.error(f"❌ Conversion failed with return code {return_code}")
+                        st.warning("⚠️ Conversion completed but no markdown directory was created.")
 
-                except Exception as e:
-                    st.error(f"❌ An error occurred during conversion: {str(e)}")
+                else:
+                    progress_bar.progress(100)
+                    status_text.text("❌ Conversion failed")
+                    st.error(f"❌ Conversion failed with return code {return_code}")
+
+            except Exception as e:
+                st.error(f"❌ An error occurred during conversion: {str(e)}")
 
     # Footer
     st.markdown("---")

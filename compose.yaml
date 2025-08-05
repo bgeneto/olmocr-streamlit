@@ -7,7 +7,7 @@ services:
     ports:
       - "8006:8501"
     volumes:
-      - ./workspace:/workspace
+      - .${WORKSPACE_DIR}:${WORKSPACE_DIR}
       - .:/app
     environment:
       - PYTHONPATH=/app
