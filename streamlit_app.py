@@ -62,7 +62,13 @@ st.markdown(
 def check_vllm_server_status(base_url: str) -> bool:
     """Check if vLLM server is accessible"""
     try:
-        response = requests.get(f"{base_url}/v1/models", timeout=5)
+        headers = {}
+        # Add API key if available
+        vllm_api_key = os.environ.get("VLLM_API_KEY")
+        if vllm_api_key:
+            headers["Authorization"] = f"Bearer {vllm_api_key}"
+
+        response = requests.get(f"{base_url}/v1/models", headers=headers, timeout=5)
         return response.status_code == 200
     except:
         return False
@@ -86,6 +92,11 @@ def run_olmocr_conversion(pdf_files, workspace_dir: str, vllm_base_url: str, **k
     if vllm_base_url:
         cmd.extend(["--vllm_base_url", vllm_base_url])
 
+    # Add vLLM API key if available
+    vllm_api_key = os.environ.get("VLLM_API_KEY")
+    if vllm_api_key:
+        cmd.extend(["--vllm_api_key", vllm_api_key])
+
     # Add additional parameters
     if kwargs.get("target_dim"):
         cmd.extend(["--target_longest_image_dim", str(kwargs["target_dim"])])
@@ -105,6 +116,7 @@ def main():
 
     # Get vLLM server URL from environment variable
     vllm_base_url = os.environ.get("VLLM_BASE_URL", "http://vllm-server:30024")
+    vllm_api_key = os.environ.get("VLLM_API_KEY")
 
     # Sidebar configuration
     st.sidebar.header("⚙️ Configuration")
@@ -116,6 +128,13 @@ def main():
         st.sidebar.success("✅ vLLM Server: Online")
     else:
         st.sidebar.error("❌ vLLM Server: Offline")
+
+    # API Key status
+    if vllm_api_key:
+        st.sidebar.success("🔑 API Key: Configured")
+    else:
+        st.sidebar.warning("🔑 API Key: Not set")
+        st.sidebar.info("💡 Set VLLM_API_KEY environment variable if your server requires authentication")
 
     if st.sidebar.button("🔍 Refresh Server Status"):
         st.rerun()
@@ -130,31 +149,16 @@ def main():
     workers = st.sidebar.slider("Number of Workers", 1, 20, 10)
 
     # Main interface
-    col1, col2 = st.columns([2, 1])
+    st.header("📁 Upload PDF Files")
 
-    with col1:
-        st.header("📁 Upload PDF Files")
+    # File uploader
+    uploaded_files = st.file_uploader("Choose PDF files", type=["pdf"], accept_multiple_files=True, help="Upload one or more PDF files to convert to Markdown")
 
-        # File uploader
-        uploaded_files = st.file_uploader(
-            "Choose PDF files", type=["pdf"], accept_multiple_files=True, help="Upload one or more PDF files to convert to Markdown"
-        )
-
-        if uploaded_files:
-            st.write(f"📋 **{len(uploaded_files)} file(s) uploaded:**")
-            for file in uploaded_files:
-                file_size = len(file.getbuffer())
-                st.write(f"• {file.name} ({file_size/1024/1024:.2f} MB)")
-
-    with col2:
-        st.header("📊 Status")
-
-        # Server status indicator
-        server_status = check_vllm_server_status(vllm_base_url)
-        if server_status:
-            st.markdown('<div class="success-box">🟢 vLLM Server: Online</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="error-box">🔴 vLLM Server: Offline</div>', unsafe_allow_html=True)
+    if uploaded_files:
+        st.write(f"📋 **{len(uploaded_files)} file(s) uploaded:**")
+        for file in uploaded_files:
+            file_size = len(file.getbuffer())
+            st.write(f"• {file.name} ({file_size/1024/1024:.2f} MB)")
 
     # Conversion section
     if uploaded_files:
