@@ -548,7 +548,7 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
             # Add page number header if requested
             content = ""
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content += f"- Page {page_result.page_num} -\n\n"
+                content += f"(Page {page_result.page_num})\n\n"
 
             content += page_result.response.natural_text
             if index < len(page_results) - 1:
@@ -556,7 +556,7 @@ def build_dolma_document(pdf_orig_path, page_results, args=None):
         else:
             # Even for empty content, add page header if requested
             if args and hasattr(args, "add_page_numbers") and args.add_page_numbers:
-                content = f"- Page {page_result.page_num} -\n\n"
+                content = f"(Page {page_result.page_num})\n\n"
             else:
                 content = ""
 
@@ -1208,7 +1208,7 @@ async def main():
     parser.add_argument("--apply_filter", action="store_true", help="Apply basic filtering to English pdfs which are not forms, and not likely seo spam")
     parser.add_argument("--stats", action="store_true", help="Instead of running any job, reports some statistics about the current workspace")
     parser.add_argument("--markdown", action="store_true", help="Also write natural text to markdown files preserving the folder structure of the input pdfs")
-    parser.add_argument("--add_page_numbers", action="store_true", help="Add page number headers to markdown output (e.g., '- Page 1 -')")
+    parser.add_argument("--add_page_numbers", action="store_true", help="Add page number headers to markdown output (e.g., '(Page 1)')")
 
     parser.add_argument("--target_longest_image_dim", type=int, help="Dimension on longest side to use for rendering the pdf pages", default=1288)
     parser.add_argument("--target_anchor_text_len", type=int, help="Maximum amount of anchor text to use (characters), not used for new models", default=-1)
